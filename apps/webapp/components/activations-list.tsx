@@ -3,6 +3,7 @@
 import ActivationSingleForm from '@/components/activation-single-form';
 import { ACTIVATION_DISPLAY_DEFAULT_CONTEXT_TOKENS } from '@/lib/utils/activations';
 import { CIRCUIT_SPARSITY_MODELS } from '@/lib/utils/circuit-sparsity';
+import { NEURON_DASHBOARD_BOTTOM_DATA_SOURCE } from '@/lib/utils/neuron-dashboards';
 import * as ToggleGroup from '@radix-ui/react-toggle-group';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { HelpCircle } from 'lucide-react';
@@ -176,7 +177,11 @@ export default function ActivationsList({
           activations.forEach((act) => {
             if (act.tokens) {
               const key = JSON.stringify(act.tokens.toSorted());
-              if (!uniqueActsMap.has(key) && act.maxValue !== undefined && act.maxValue > 0) {
+              // bottom rows peak below zero on purpose
+              const hasActivation =
+                act.maxValue !== undefined &&
+                (act.maxValue > 0 || act.dataSource === NEURON_DASHBOARD_BOTTOM_DATA_SOURCE);
+              if (!uniqueActsMap.has(key) && hasActivation) {
                 uniqueActsMap.set(key, act);
               }
             }

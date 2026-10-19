@@ -15,7 +15,9 @@ import SaeLensConfigPane from '@/components/panes/saelens-config-pane';
 import { useGlobalContext } from '@/components/provider/global-provider';
 import { BreadcrumbLink, BreadcrumbPage } from '@/components/shadcn/breadcrumbs';
 import VectorItem from '@/components/vector-item';
+import useNeuronDashboard from '@/lib/hooks/use-neuron-dashboard';
 import { CIRCUIT_SPARSITY_MODELS } from '@/lib/utils/circuit-sparsity';
+import { applyNeuronDashboard } from '@/lib/utils/neuron-dashboards';
 import { getFeaturePath } from '@/lib/utils/neuron-identifier';
 import { neuronHasVectorInDatabase, shouldHideBreadcrumbsAndSelectorForNeuronVector } from '@/lib/utils/neuron-vector';
 import { getSourceSetNameFromSource, NEURONS_SOURCESET } from '@/lib/utils/source';
@@ -59,7 +61,21 @@ export default function FeatureDashboard({
   activationMarkerValue?: number;
 }) {
   const [currentNeuron, setCurrentNeuron] = useState<NeuronWithPartialRelations | undefined>(initialNeuron);
-  const { getReleaseForSourceSet } = useGlobalContext();
+  const { getReleaseForSourceSet, getSourceSet } = useGlobalContext();
+  const externalDashboard = useNeuronDashboard(
+    getSourceSet(currentNeuron?.modelId || '', currentNeuron?.sourceSetName || '')?.externalDashboardsUrl,
+    currentNeuron?.modelId,
+    currentNeuron?.layer,
+    currentNeuron?.index,
+  );
+  // Database fields, with activations and stats from the external dashboard when the source set has one.
+  const shownNeuron = useMemo(
+    () =>
+      currentNeuron && externalDashboard.status === 'ready'
+        ? applyNeuronDashboard(currentNeuron, externalDashboard.dashboard)
+        : currentNeuron,
+    [currentNeuron, externalDashboard],
+  );
   const [hideDeadWarning, setHideDeadWarning] = useState(false);
   const [testTextResult, setTestTextResult] = useState<Activation | undefined>();
   const pathname = usePathname();
@@ -334,10 +350,10 @@ export default function FeatureDashboard({
             id="activationScrollDiv"
           >
             <div className="flex-1 overflow-y-scroll border border-slate-200 sm:rounded-lg">
-              {currentNeuron?.pos_str && currentNeuron?.pos_str?.length > 0 && embedPlots && (
+              {shownNeuron?.pos_str && shownNeuron?.pos_str?.length > 0 && embedPlots && (
                 <div className="border-b px-2.5 pb-1.5 pt-1.5 sm:px-4 sm:pb-2 sm:pt-2">
                   <FeatureStats
-                    currentNeuron={currentNeuron}
+                    currentNeuron={shownNeuron}
                     embed={embed}
                     embedPlots={embedPlots}
                     activationMarkerValue={activationMarkerValue}
@@ -345,32 +361,44 @@ export default function FeatureDashboard({
                   />
                 </div>
               )}
-              <ActivationsList
-                feature={currentNeuron}
-                defaultRange={forceMiniStats ? 1 : currentNeuron?.sourceSet?.defaultRange}
-                defaultShowLineBreaks={forceMiniStats ? false : currentNeuron?.sourceSet?.defaultShowBreaks}
-                showCopy={allowTest()}
-                showTest={allowTest()}
-                defaultActivationTestText={defaultTestText}
-                showControls={!embed}
-                overrideLeading={forceMiniStats ? 'leading-none sm:leading-none' : 'leading-tight sm:leading-tight'}
-                overrideTextSize={embed ? (forceMiniStats ? 'text-[10px]' : 'text-[10px] sm:text-[12px]') : undefined}
-                embed={embed}
-                activations={currentNeuron?.activations}
-                activationTestTextCallback={(activation) => {
-                  setTestTextResult(activation);
-                }}
-                // if false, only show the activation test
-                showActivations={embedActivations}
-                showSteerButton={embedSteer}
-                showTestField={embedTestField}
-              />
+              {externalDashboard.status === 'error' && (
+                <div className="border-b px-4 py-2 text-xs text-red-600">
+                  Could not load this dashboard: {externalDashboard.error}
+                </div>
+              )}
+              {externalDashboard.status === 'loading' ? (
+                <div className="flex h-48 w-full items-center justify-center text-sm font-medium text-slate-400">
+                  Loading dashboard...
+                </div>
+              ) : (
+                <ActivationsList
+                  feature={shownNeuron}
+                  defaultRange={forceMiniStats ? 1 : currentNeuron?.sourceSet?.defaultRange}
+                  defaultShowLineBreaks={forceMiniStats ? false : currentNeuron?.sourceSet?.defaultShowBreaks}
+                  showCopy={allowTest()}
+                  showTest={allowTest()}
+                  defaultActivationTestText={defaultTestText}
+                  showControls={!embed}
+                  overrideLeading={forceMiniStats ? 'leading-none sm:leading-none' : 'leading-tight sm:leading-tight'}
+                  overrideTextSize={embed ? (forceMiniStats ? 'text-[10px]' : 'text-[10px] sm:text-[12px]') : undefined}
+                  embed={embed}
+                  activations={shownNeuron?.activations}
+                  activationTestTextCallback={(activation) => {
+                    setTestTextResult(activation);
+                  }}
+                  // if false, only show the activation test
+                  showActivations={embedActivations}
+                  showSteerButton={embedSteer}
+                  showTestField={embedTestField}
+                />
+              )}
             </div>
           </div>
         </div>
 
         {/* === DEAD FEATURE */}
-        {currentNeuron?.maxActApprox === 0 &&
+        {shownNeuron?.maxActApprox === 0 &&
+          externalDashboard.status !== 'loading' &&
           !CIRCUIT_SPARSITY_MODELS.includes(currentNeuron?.modelId || '') &&
           !hideDeadWarning &&
           !currentNeuron?.hasVector && (

@@ -10,7 +10,7 @@ import {
 } from '@/lib/utils/activations';
 import { cn } from '@/lib/utils/ui';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { Copy, Play } from 'lucide-react';
+import { Play } from 'lucide-react';
 import { ActivationPartialWithRelations } from 'prisma/generated/zod';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ActivationItemTokenTooltip from './activation-item-token-tooltip';
@@ -533,11 +533,11 @@ export default function ActivationItem({
           <button
             type="button"
             className="flex cursor-pointer flex-row rounded bg-slate-100 p-1.5 text-[10px] font-medium text-slate-400 hover:bg-slate-200"
-            title="Copy/Remix"
+            title="Test Prompt"
             disabled={isCopying}
             onClick={copyToTestField}
           >
-            <Copy className="h-3 w-3" />
+            <Play className="h-3 w-3" />
           </button>
         </div>
       )}

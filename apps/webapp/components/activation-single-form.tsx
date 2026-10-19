@@ -2,7 +2,7 @@
 
 import ActivationItem from '@/components/activation-item';
 import { useGlobalContext } from '@/components/provider/global-provider';
-import { getSourceSetNameFromSource } from '@/lib/utils/source';
+import { getSourceSetNameFromSource, isNeuronLayerSource } from '@/lib/utils/source';
 import { Activation } from '@prisma/client';
 import { MagnifyingGlassIcon } from '@radix-ui/react-icons';
 import copy from 'copy-to-clipboard';
@@ -259,20 +259,23 @@ export default function ActivationSingleForm({
                   >
                     <XIcon className="h-3 w-3" /> Reset
                   </button>
-                  <button
-                    type="button"
-                    className="my-1 ml-1.5 flex w-[62px] cursor-pointer flex-row items-center justify-center gap-x-0.5 whitespace-pre rounded bg-slate-200 px-1.5 py-1.5 text-[9px] font-medium text-slate-600 hover:bg-slate-300 sm:px-2 sm:py-1.5 sm:text-[10.5px]"
-                    title="TopK Search"
-                    onClick={() => {
-                      const textToUse = activationResult.tokens.join('');
-                      window.open(
-                        `/search-topk-by-token?modelId=${neuron.modelId}&source=${neuron.layer}&text=${encodeURIComponent(textToUse)}`,
-                        '_blank',
-                      );
-                    }}
-                  >
-                    <MagnifyingGlassIcon className="h-3 w-3" /> TopK
-                  </button>
+                  {/* TopK search ranks SAE latents; MLP neuron layers have none */}
+                  {!isNeuronLayerSource(neuron.layer) && (
+                    <button
+                      type="button"
+                      className="my-1 ml-1.5 flex w-[62px] cursor-pointer flex-row items-center justify-center gap-x-0.5 whitespace-pre rounded bg-slate-200 px-1.5 py-1.5 text-[9px] font-medium text-slate-600 hover:bg-slate-300 sm:px-2 sm:py-1.5 sm:text-[10.5px]"
+                      title="TopK Search"
+                      onClick={() => {
+                        const textToUse = activationResult.tokens.join('');
+                        window.open(
+                          `/search-topk-by-token?modelId=${neuron.modelId}&source=${neuron.layer}&text=${encodeURIComponent(textToUse)}`,
+                          '_blank',
+                        );
+                      }}
+                    >
+                      <MagnifyingGlassIcon className="h-3 w-3" /> TopK
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="my-1 ml-1.5 flex w-[62px] cursor-pointer flex-row items-center justify-center gap-x-0.5 whitespace-pre rounded bg-slate-200 px-1.5 py-1.5 text-[9px] font-medium text-slate-600 hover:bg-slate-300 sm:px-2 sm:py-1.5 sm:text-[10.5px]"

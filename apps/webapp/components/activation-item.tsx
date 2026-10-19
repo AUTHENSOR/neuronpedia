@@ -1,6 +1,6 @@
 'use client';
 
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/shadcn/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/shadcn/dialog';
 import useNeuronDashboardDoc, { NeuronDashboardDocContext } from '@/lib/hooks/use-neuron-dashboard-doc';
 import {
   ACTIVATION_DISPLAY_DEFAULT_CONTEXT_TOKENS,
@@ -538,12 +538,11 @@ export default function ActivationItem({
       )}
       {dashboardDoc && !fullContext && (
         <Dialog open={isFullContextOpen} onOpenChange={setIsFullContextOpen}>
-          <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col gap-3 bg-white">
+          <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col gap-3 bg-white" aria-describedby={undefined}>
             <DialogHeader>
-              <DialogTitle className="text-base">Full Context</DialogTitle>
-              <DialogDescription className="text-xs">
-                Colored tokens have activation values. Gray text is the rest of the document.
-              </DialogDescription>
+              <DialogTitle className="text-center font-mono text-xs font-semibold uppercase text-slate-500">
+                {activation.modelId} · Layer {activation.layer} · Neuron {activation.index}
+              </DialogTitle>
             </DialogHeader>
             <div ref={fullContextRef} className="min-h-0 overflow-y-auto pr-2">
               {typeof docContext === 'object' && docContext !== null ? (

@@ -67,7 +67,7 @@ export default function FeatureDashboard({
   activationMarkerValue?: number;
 }) {
   const [currentNeuron, setCurrentNeuron] = useState<NeuronWithPartialRelations | undefined>(initialNeuron);
-  const { getReleaseForSourceSet, getSourceSet, globalModels } = useGlobalContext();
+  const { getReleaseForSourceSet, getSource, getSourceSet, globalModels } = useGlobalContext();
   // A neuron with no database row has no model or sourceSet relation, so fall back to the global lists.
   const crumbModel = currentNeuron?.model || globalModels[currentNeuron?.modelId || ''];
   const crumbSourceSet =
@@ -114,7 +114,8 @@ export default function FeatureDashboard({
       }
       return true;
     }
-    if (currentNeuron?.source?.inferenceEnabled === true) {
+    const testSource = currentNeuron?.source || getSource(currentNeuron?.modelId || '', currentNeuron?.layer || '');
+    if (testSource?.inferenceEnabled === true) {
       if (embed) {
         return embedTest;
       }
@@ -220,7 +221,7 @@ export default function FeatureDashboard({
               />
             </div>
             <div className="hidden flex-row items-start justify-start gap-x-2 px-0 pt-1 sm:flex">
-              {allowTest() && (
+              {allowTest() && !isNeuronLayer && (
                 <button
                   type="button"
                   onClick={async () => {
@@ -404,7 +405,8 @@ export default function FeatureDashboard({
                   }}
                   // if false, only show the activation test
                   showActivations={embedActivations}
-                  showSteerButton={embedSteer}
+                  // inference has no steering for MLP neurons
+                  showSteerButton={embedSteer && !isNeuronLayer}
                   showTestField={embedTestField}
                 />
               )}

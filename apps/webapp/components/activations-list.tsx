@@ -7,7 +7,7 @@ import * as ToggleGroup from '@radix-ui/react-toggle-group';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { HelpCircle } from 'lucide-react';
 import { Activation, ActivationPartialWithRelations, NeuronWithPartialRelations } from 'prisma/generated/zod';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import 'react-loading-skeleton/dist/skeleton.css';
 import ActivationItem from './activation-item';
 import { useGlobalContext } from './provider/global-provider';
@@ -60,6 +60,14 @@ export default function ActivationsList({
   const [dfaSplit, setDfaSplit] = useState(true);
   // used to determine colors
   const [overallMaxValue, setOverallMaxValue] = useState<number>(-100);
+  const overallMinValue = useMemo(
+    () =>
+      (activations || []).reduce(
+        (min, act) => (act.values || []).reduce((rowMin, v) => (v < rowMin ? v : rowMin), min),
+        0,
+      ),
+    [activations],
+  );
   const [items, setItems] = useState<ActivationPartialWithRelations[]>([]);
   const [topItems, setTopItems] = useState<ActivationPartialWithRelations[]>([]);
   const [bottomItems, setBottomItems] = useState<ActivationPartialWithRelations[]>([]);
@@ -274,6 +282,7 @@ export default function ActivationsList({
             embed={embed}
             hideSteer={!showSteerButton}
             hideTestField={!showTestField}
+            overallMinValue={overallMinValue}
           />
         </div>
       )}
@@ -411,6 +420,7 @@ export default function ActivationsList({
                             dfaSplit={dfaSplit}
                             showCopy={showCopy}
                             overallMaxActivationValueInList={overallMaxValue}
+                            overallMinActivationValueInList={overallMinValue}
                             overrideLeading={overrideLeading}
                             overrideTextSize={overrideTextSize || 'text-[9.5px] sm:text-xs'}
                             className={activationItemClassName}
@@ -454,6 +464,7 @@ export default function ActivationsList({
                             dfaSplit={dfaSplit}
                             showCopy={showCopy}
                             overallMaxActivationValueInList={overallMaxValue}
+                            overallMinActivationValueInList={overallMinValue}
                             overrideLeading={overrideLeading}
                             overrideTextSize={overrideTextSize || 'text-[9.5px] sm:text-xs'}
                             className={activationItemClassName}
@@ -570,6 +581,7 @@ export default function ActivationsList({
                           dfaSplit={dfaSplit}
                           showCopy={showCopy}
                           overallMaxActivationValueInList={overallMaxValue}
+                          overallMinActivationValueInList={overallMinValue}
                           overrideLeading={overrideLeading}
                           overrideTextSize={overrideTextSize || 'text-[9.5px] sm:text-xs'}
                           className={activationItemClassName}

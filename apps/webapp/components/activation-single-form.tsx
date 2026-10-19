@@ -14,6 +14,22 @@ import { Button } from './shadcn/button';
 import { LoadingSquare } from './svg/loading-square';
 
 const DEFAULT_STEER_MULTIPLIER = 3;
+
+// The token to show beside a result: the most negative one when it is larger in size than the max.
+function peakOfResult(result: Activation) {
+  const min = result.values.reduce((m, v) => (v < m ? v : m), 0);
+  if (-min > result.maxValue) {
+    return { tokenIndex: result.values.indexOf(min), value: min, negative: true };
+  }
+  return { tokenIndex: result.maxValueTokenIndex, value: result.maxValue, negative: false };
+}
+
+function formatPeakValue(value: number) {
+  if (value.toFixed(2) === '0.00' || value.toFixed(2) === '-0.00') {
+    return value.toFixed(3) === '0.000' || value.toFixed(3) === '-0.000' ? value.toFixed(4) : value.toFixed(3);
+  }
+  return value.toFixed(2);
+}
 const HIDE_STEER_MODELS: string[] = []; // 'gpt-oss-20b'
 const HIDE_STEER_MODELS_PREFIX = ['gemma-3-'];
 
@@ -28,6 +44,7 @@ export default function ActivationSingleForm({
   embed = false,
   hideSteer = false,
   hideTestField = false, // this is a simple mode that only shows the result
+  overallMinValue,
 }: {
   neuron: NeuronWithPartialRelations;
   overallMaxValue: number;
@@ -39,6 +56,7 @@ export default function ActivationSingleForm({
   embed?: boolean;
   hideSteer?: boolean;
   hideTestField?: boolean;
+  overallMinValue?: number;
 }) {
   const {
     getSourceSet,
@@ -128,6 +146,8 @@ export default function ActivationSingleForm({
     return `rgba(5, 150, 105, ${Math.max(opacity, min)})`;
   }
 
+  const resultPeak = activationResult ? peakOfResult(activationResult) : undefined;
+
   return (
     <div
       className={`flex w-full flex-row items-center justify-center gap-x-1.5 sm:border-0 ${
@@ -214,23 +234,17 @@ export default function ActivationSingleForm({
             <div className="flex w-full flex-row pb-0.5 pt-1 sm:pb-1 sm:pt-2">
               <div className="hidden max-h-72 shrink-0 flex-col items-center justify-center overflow-y-scroll text-center sm:flex">
                 <div className="px-5 font-mono text-[10px] font-medium text-slate-500">
-                  {activationResult.maxValueTokenIndex !== undefined && activationResult.tokens !== undefined ? (
-                    <span>{activationResult.tokens[activationResult.maxValueTokenIndex]}</span>
+                  {activationResult.tokens !== undefined ? (
+                    <span>{activationResult.tokens[resultPeak?.tokenIndex ?? 0]}</span>
                   ) : (
                     ''
                   )}
                 </div>
                 <div
-                  className="px-5 font-mono text-[10px] font-bold"
-                  style={{
-                    color: makeActivationTextColor(1, 1, 0.5),
-                  }}
+                  className={`px-5 font-mono text-[10px] font-bold ${resultPeak?.negative ? 'text-rose-600' : ''}`}
+                  style={resultPeak?.negative ? undefined : { color: makeActivationTextColor(1, 1, 0.5) }}
                 >
-                  {activationResult.maxValue.toFixed(2) === '0.00'
-                    ? activationResult.maxValue.toFixed(3) === '0.000'
-                      ? activationResult.maxValue.toFixed(4)
-                      : activationResult.maxValue.toFixed(3)
-                    : activationResult.maxValue.toFixed(2)}
+                  {formatPeakValue(resultPeak?.value ?? 0)}
                 </div>
               </div>
               <div className="max-h-72 flex-auto overflow-y-scroll px-3 text-sm sm:px-0">
@@ -239,6 +253,7 @@ export default function ActivationSingleForm({
                   overallMaxActivationValueInList={
                     overallMaxValue === -100 ? activationResult.maxValue : overallMaxValue
                   }
+                  overallMinActivationValueInList={overallMinValue}
                   overrideTextSize="text-[10px] sm:text-xs"
                   showLineBreaks
                   dfa={getSourceSet(neuron.modelId, neuron.sourceSetName || '')?.showDfa}

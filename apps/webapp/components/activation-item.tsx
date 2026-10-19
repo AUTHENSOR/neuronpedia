@@ -40,6 +40,7 @@ export default function ActivationItem({
   overrideLeading = 'leading-none sm:leading-tight',
   overrideTextColor = 'text-slate-600',
   className,
+  overallMinActivationValueInList,
 }: {
   activation: ActivationPartialWithRelations;
   overallMaxActivationValueInList?: number;
@@ -56,6 +57,8 @@ export default function ActivationItem({
   overrideLeading?: string;
   overrideTextColor?: string;
   className?: string;
+  // most negative value in the list, so negative tokens share one red scale; defaults to this row's own minimum
+  overallMinActivationValueInList?: number;
 }) {
   const [currentRange, setCurrentRange] = useState(tokensToDisplayAroundMaxActToken);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -76,6 +79,11 @@ export default function ActivationItem({
 
   const isBottomActivation = activation.dataSource === BOTTOM_ACTIVATION_DATA_SOURCE;
   const minActivationTokenIndex = activation.values ? activation.values.indexOf(Math.min(...activation.values)) : 0;
+  const negativeScale = Math.abs(
+    isBottomActivation
+      ? activation.minValue || 0
+      : (overallMinActivationValueInList ?? Math.min(0, ...(activation.values || []))),
+  );
 
   // For bottom activations, center around the most negative value; otherwise center around max
   const anchorTokenIndex = isBottomActivation ? minActivationTokenIndex : maxActivationTokenIndex;
@@ -355,14 +363,14 @@ export default function ActivationItem({
                             backgroundImage: (() => {
                               const tokenValue = activation.values ? activation.values[tokenIndex] : 0;
                               const isNegativeToken = tokenValue < 0;
-                              // For bottom activations with negative token values, use red; otherwise use green
-                              const useRed = isBottomActivation && isNegativeToken;
+                              // Negative values (MLP neurons, vector projections) are red; positive values are green
+                              const useRed = isNegativeToken && negativeScale > 0;
                               const zHoverContribution =
                                 hasZPattern && zHoveredTargetIndex !== null
                                   ? Math.max(0, zContributionsBySource.get(tokenIndex) || 0)
                                   : 0;
                               return makeActivationBackgroundColorWithDFA(
-                                useRed ? Math.abs(activation.minValue || 0) : overallMaxActivationValueInList,
+                                useRed ? negativeScale : overallMaxActivationValueInList,
                                 useRed ? Math.abs(tokenValue) : tokenValue,
                                 useRed ? '253, 164, 175' : '52, 211, 153',
                                 hasZPattern

@@ -1,22 +1,32 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '../api-error';
 import fixture from '../utils/__fixtures__/neuron-dashboard-qwen3-32b-31-12345.json';
-import { NeuronDashboardRecord, recordToNeuronDashboard } from '../utils/neuron-dashboards';
-import { ensureNeuronRowForDashboard, getActivationsForFeature } from './neuron-dashboard';
+import { NeuronDashboardError, NeuronDashboardRecord, recordToNeuronDashboard } from '../utils/neuron-dashboards';
+import {
+  ensureNeuronRowForDashboard,
+  ensureNeuronRowForFeature,
+  getActivationsForFeature,
+  markNearZeroAsNonActivating,
+  NEAR_ZERO_FRACTION,
+} from './neuron-dashboard';
 
 // vi.mock is hoisted above the imports, so its factory can only close over
 // values created by vi.hoisted.
-const { sourceSetFindUnique, activationFindMany, neuronUpsert, fetchNeuronDashboard } = vi.hoisted(() => ({
-  sourceSetFindUnique: vi.fn(),
-  activationFindMany: vi.fn(),
-  neuronUpsert: vi.fn(),
-  fetchNeuronDashboard: vi.fn(),
-}));
+const { sourceSetFindUnique, activationFindMany, neuronUpsert, neuronFindUnique, fetchNeuronDashboard } = vi.hoisted(
+  () => ({
+    sourceSetFindUnique: vi.fn(),
+    activationFindMany: vi.fn(),
+    neuronUpsert: vi.fn(),
+    neuronFindUnique: vi.fn(),
+    fetchNeuronDashboard: vi.fn(),
+  }),
+);
 
 vi.mock('@/lib/db', () => ({
   prisma: {
     sourceSet: { findUnique: sourceSetFindUnique },
     activation: { findMany: activationFindMany },
-    neuron: { upsert: neuronUpsert },
+    neuron: { upsert: neuronUpsert, findUnique: neuronFindUnique },
   },
 }));
 vi.mock('@/lib/utils/neuron-dashboards', async (importOriginal) => ({
@@ -66,6 +76,70 @@ describe('getActivationsForFeature', () => {
     expect(fetchNeuronDashboard).not.toHaveBeenCalled();
     expect(loaded).toBeNull();
     expect(activations).toEqual([{ id: 'a' }]);
+  });
+});
+
+describe('getActivationsForFeature errors', () => {
+  it('turns a missing dashboard file into a 404', async () => {
+    sourceSetFindUnique.mockResolvedValue({ externalDashboardsUrl: 'https://dashboards.example/v1/qwen3-32b' });
+    fetchNeuronDashboard.mockRejectedValue(new NeuronDashboardError('no dashboard'));
+
+    const error = await getActivationsForFeature(ids).catch((e) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(404);
+  });
+});
+
+describe('markNearZeroAsNonActivating', () => {
+  it('zeroes only rows whose every value is near zero', async () => {
+    sourceSetFindUnique.mockResolvedValue({ externalDashboardsUrl: 'https://dashboards.example/v1/qwen3-32b' });
+    fetchNeuronDashboard.mockResolvedValue(dashboard);
+    const { activations } = await getActivationsForFeature(ids);
+    const { max, min } = fixture.record.stats;
+    const limit = NEAR_ZERO_FRACTION * Math.max(Math.abs(max), Math.abs(min));
+
+    const marked = markNearZeroAsNonActivating(activations, dashboard);
+
+    expect(marked).toHaveLength(activations.length);
+    marked.forEach((row, i) => {
+      const quiet = activations[i].values.every((v) => Math.abs(v) < limit);
+      if (quiet) {
+        expect(row.maxValue).toBe(0);
+        expect(row.values.every((v) => v === 0)).toBe(true);
+      } else {
+        expect(row).toBe(activations[i]);
+      }
+    });
+    // the top examples stay as they are
+    expect(marked.filter((row) => row.maxValue === fixture.record.stats.max).length).toBeGreaterThan(0);
+  });
+});
+
+describe('ensureNeuronRowForFeature', () => {
+  it('does nothing when the Neuron row exists', async () => {
+    neuronFindUnique.mockResolvedValue({ index: '12345' });
+    await ensureNeuronRowForFeature(ids);
+    expect(sourceSetFindUnique).not.toHaveBeenCalled();
+    expect(neuronUpsert).not.toHaveBeenCalled();
+  });
+
+  it('creates the row for a file dashboard, using only the id fields as the key', async () => {
+    neuronFindUnique.mockResolvedValue(null);
+    sourceSetFindUnique.mockResolvedValue({ externalDashboardsUrl: 'https://dashboards.example/v1/qwen3-32b' });
+    fetchNeuronDashboard.mockResolvedValue(dashboard);
+    neuronUpsert.mockResolvedValue({ ...ids });
+
+    await ensureNeuronRowForFeature({ ...ids, description: 'list note' } as typeof ids);
+
+    expect(neuronFindUnique.mock.calls[0][0].where).toEqual({ modelId_layer_index: ids });
+    expect(neuronUpsert.mock.calls[0][0].where).toEqual({ modelId_layer_index: ids });
+  });
+
+  it('creates nothing for a database source set', async () => {
+    neuronFindUnique.mockResolvedValue(null);
+    sourceSetFindUnique.mockResolvedValue({ externalDashboardsUrl: null });
+    await ensureNeuronRowForFeature({ ...ids, layer: '6-res-jb' });
+    expect(neuronUpsert).not.toHaveBeenCalled();
   });
 });
 

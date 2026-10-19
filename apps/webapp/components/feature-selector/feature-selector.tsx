@@ -187,7 +187,7 @@ export default function FeatureSelector({
 
   const indexInputRef = useRef<HTMLInputElement>(null);
 
-  // On a neuron page, step links for layer and index sit under those boxes, for the page's own neuron.
+  // On a neuron page, layer step links sit under the layer box, for the page's own neuron.
   const pageModelId = defaultModelId || modelId;
   const pageModel = globalModels[pageModelId];
   const pageIndex = parseInt(defaultIndex, 10);
@@ -198,6 +198,7 @@ export default function FeatureSelector({
   const isNeuronPage = pageLayer !== undefined;
   const hasPrevLayer = isNeuronPage && pageLayer > 0;
   const hasNextLayer = isNeuronPage && (!pageModel?.layers || pageLayer + 1 < pageModel.layers);
+  // neuronsPerLayer counts MLP neurons, so it only bounds neuron pages
   const hasNextIndex = !pageModel?.neuronsPerLayer || pageIndex + 1 < pageModel.neuronsPerLayer;
 
   useEffect(() => {
@@ -272,7 +273,7 @@ export default function FeatureSelector({
         </div>
       )}
       <div className="flex items-start justify-center gap-x-1 sm:gap-x-2">
-        {showNextPrev && !isNeuronPage && (
+        {showNextPrev && (
           <div className="flex flex-row divide-x divide-slate-300 overflow-hidden rounded bg-slate-200">
             <Link
               className={`group hidden h-10 min-h-[40px] select-none flex-col items-center justify-center px-1.5 text-[11px] font-medium uppercase text-slate-500 hover:bg-sky-700 hover:text-white sm:flex ${
@@ -288,7 +289,7 @@ export default function FeatureSelector({
 
             <Link
               className={`group hidden h-10 min-h-[40px] select-none flex-col items-center justify-center px-1.5 text-[11px] font-medium uppercase text-slate-500 hover:bg-sky-700 hover:text-white sm:flex ${
-                parseInt(defaultIndex, 10) > 0 ? '' : ''
+                isNeuronPage && !hasNextIndex ? 'pointer-events-none opacity-50' : ''
               }`}
               href={getFeaturePath(modelId, source, parseInt(defaultIndex, 10) + 1)}
             >
@@ -370,11 +371,7 @@ export default function FeatureSelector({
         ) : (
           <>
             <div className="flex flex-col">
-              <div
-                className={`flex flex-col items-center justify-center rounded border ${
-                  isNeuronPage ? 'h-[26px] max-h-[26px] min-h-[26px]' : 'h-10 max-h-[40px] min-h-[40px]'
-                } border-slate-300 bg-white px-0.5 py-0 text-center font-mono text-xs font-medium text-sky-700 placeholder-slate-400 focus:border-sky-700 focus:ring-0 sm:w-[60px] sm:px-1`}
-              >
+              <div className="flex h-10 max-h-[40px] min-h-[40px] flex-col items-center justify-center rounded border border-slate-300 bg-white px-0.5 py-0 text-center font-mono text-xs font-medium text-sky-700 placeholder-slate-400 focus:border-sky-700 focus:ring-0 sm:w-[60px] sm:px-1">
                 <input
                   type="text"
                   ref={indexInputRef}
@@ -400,24 +397,6 @@ export default function FeatureSelector({
                   INDEX
                 </div>
               </div>
-              {isNeuronPage && (
-                <div className="mt-0.5 flex flex-row gap-x-0.5">
-                  <StepLink
-                    href={getFeaturePath(pageModelId, defaultSource, pageIndex - 1)}
-                    disabled={pageIndex <= 0}
-                    title="Previous index"
-                  >
-                    <ChevronLeft className="h-2.5 w-2.5" />
-                  </StepLink>
-                  <StepLink
-                    href={getFeaturePath(pageModelId, defaultSource, pageIndex + 1)}
-                    disabled={!hasNextIndex}
-                    title="Next index"
-                  >
-                    <ChevronRight className="h-2.5 w-2.5" />
-                  </StepLink>
-                </div>
-              )}
             </div>
             <button
               type="button"

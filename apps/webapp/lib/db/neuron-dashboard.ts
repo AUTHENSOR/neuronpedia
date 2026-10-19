@@ -1,8 +1,10 @@
 // Server reads of neuron dashboards stored as files (SourceSet.externalDashboardsUrl).
+// Routes that read Activation rows or write rows that reference a Neuron use these helpers.
 // Such neurons have no Activation rows, and no Neuron row until something is written for them.
 
+import { notFound } from '@/lib/api-error';
 import { prisma } from '@/lib/db';
-import { fetchNeuronDashboard, NeuronDashboard } from '@/lib/utils/neuron-dashboards';
+import { fetchNeuronDashboard, NeuronDashboard, NeuronDashboardError } from '@/lib/utils/neuron-dashboards';
 import { getSourceSetNameFromSource } from '@/lib/utils/source';
 import { ActivationPartialWithRelations } from '@/prisma/generated/zod';
 import { Activation, Neuron } from '@prisma/client';
@@ -18,7 +20,14 @@ export async function getExternalNeuronDashboard(ids: FeatureIds): Promise<Neuro
   if (!sourceSet?.externalDashboardsUrl) {
     return null;
   }
-  return fetchNeuronDashboard(sourceSet.externalDashboardsUrl, ids);
+  try {
+    return await fetchNeuronDashboard(sourceSet.externalDashboardsUrl, ids);
+  } catch (error) {
+    if (error instanceof NeuronDashboardError) {
+      throw notFound(`No dashboard for ${ids.modelId}/${ids.layer}/${ids.index}.`);
+    }
+    throw error;
+  }
 }
 
 function toActivationRow(activation: ActivationPartialWithRelations, ids: FeatureIds): Activation {
@@ -51,6 +60,22 @@ function toActivationRow(activation: ActivationPartialWithRelations, ids: Featur
   };
 }
 
+// Share of the neuron's largest |activation| below which a whole example counts as non-activating.
+export const NEAR_ZERO_FRACTION = 0.01;
+
+// Scorers take rows with maxValue 0 as non-activating examples. Dashboard files have none, but their
+// bands nearest zero do. Rows whose every value is below NEAR_ZERO_FRACTION of the largest |act| get
+// maxValue 0 and zero values. Use this only for scoring: it changes the stored values.
+export function markNearZeroAsNonActivating(activations: Activation[], dashboard: NeuronDashboard): Activation[] {
+  const { max, min } = dashboard.record.stats;
+  const limit = NEAR_ZERO_FRACTION * Math.max(Math.abs(max), Math.abs(min));
+  return activations.map((a) =>
+    a.values.length > 0 && a.values.every((v) => Math.abs(v) < limit)
+      ? { ...a, maxValue: 0, minValue: 0, values: a.values.map(() => 0) }
+      : a,
+  );
+}
+
 // A feature's activations, from its dashboard files when it has them, otherwise from the database.
 export async function getActivationsForFeature(
   ids: FeatureIds,
@@ -68,14 +93,30 @@ export async function getActivationsForFeature(
 // Rows that reference a feature (explanations, for example) need its Neuron row. Creates a bare one
 // if it is missing and returns it with the dashboard's stats and logits on top.
 export async function ensureNeuronRowForDashboard(ids: FeatureIds, dashboard: NeuronDashboard): Promise<Neuron> {
+  const key = { modelId: ids.modelId, layer: ids.layer, index: ids.index };
   const row = await prisma.neuron.upsert({
-    where: { modelId_layer_index: ids },
+    where: { modelId_layer_index: key },
     create: {
-      ...ids,
+      ...key,
       sourceSetName: getSourceSetNameFromSource(ids.layer),
       maxActApprox: dashboard.neuron.maxActApprox,
     },
     update: {},
   });
   return { ...row, ...dashboard.neuron, maxActApprox: dashboard.neuron.maxActApprox ?? row.maxActApprox };
+}
+
+// Call before writing a row that references a feature (comment, bookmark, list entry, explanation).
+// When its source set keeps dashboards in files and it has no Neuron row, creates one. Reading the
+// file first also checks that the feature exists.
+export async function ensureNeuronRowForFeature(ids: FeatureIds): Promise<void> {
+  const key = { modelId: ids.modelId, layer: ids.layer, index: ids.index };
+  const existing = await prisma.neuron.findUnique({ where: { modelId_layer_index: key }, select: { index: true } });
+  if (existing) {
+    return;
+  }
+  const dashboard = await getExternalNeuronDashboard(ids);
+  if (dashboard) {
+    await ensureNeuronRowForDashboard(ids, dashboard);
+  }
 }

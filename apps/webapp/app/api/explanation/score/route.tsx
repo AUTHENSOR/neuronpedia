@@ -1,5 +1,6 @@
 import { toErrorResponse } from '@/lib/api-error';
 import { prisma } from '@/lib/db';
+import { getActivationsForFeature, markNearZeroAsNonActivating } from '@/lib/db/neuron-dashboard';
 import { getAutoInterpKeyToUse } from '@/lib/db/userSecret';
 import { generateScoreEleuther } from '@/lib/external/autointerp-scorer-eleuther';
 import { generateScoreJev, isJevScoreType, JEV_SCORE_MODEL_NAME } from '@/lib/external/autointerp-scorer-jev';
@@ -210,18 +211,14 @@ export const POST = withAuthedUser(async (request: RequestAuthedUser) => {
     }
 
     // get the neuron and all its activations
-    let activations = await prisma.activation.findMany({
-      where: {
-        neuron: {
-          modelId: explanation.modelId,
-          layer: explanation.layer,
-          index: explanation.index,
-        },
-      },
-      // orderBy: {
-      //   maxValue: "desc",
-      // },
+    const loaded = await getActivationsForFeature({
+      modelId: explanation.modelId,
+      layer: explanation.layer,
+      index: explanation.index,
     });
+    let activations = loaded.dashboard
+      ? markNearZeroAsNonActivating(loaded.activations, loaded.dashboard)
+      : loaded.activations;
 
     // remove duplicates in activations where the tokens.join("") is the same
     activations = [...new Map(activations.map((item) => [item.tokens.join(''), item])).values()];
@@ -258,7 +255,7 @@ export const POST = withAuthedUser(async (request: RequestAuthedUser) => {
         activations,
         zeroActivations,
         explanation,
-        neuron?.pos_str || [],
+        loaded.dashboard?.neuron.pos_str || neuron?.pos_str || [],
         request.user,
       );
       return NextResponse.json({ score });

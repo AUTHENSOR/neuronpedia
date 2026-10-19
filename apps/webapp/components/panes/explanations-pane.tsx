@@ -102,11 +102,6 @@ export default function ExplanationsPane({
     }
   }, [explanationScoreTypes]);
 
-  // The interpretable score reads activations from the database, which file dashboards do not use.
-  const usesExternalDashboard = Boolean(
-    getSourceSet(currentNeuron?.modelId || '', currentNeuron?.sourceSetName || '')?.externalDashboardsUrl,
-  );
-
   useEffect(() => {
     const filtered = explanationTypes
       .filter((expType) => {
@@ -1120,11 +1115,7 @@ export default function ExplanationsPane({
             </CustomTooltip>
           </div>
         )}
-        <div
-          className={`flex-1 items-center justify-center gap-x-1.5 py-1.5 sm:py-0 ${
-            usesExternalDashboard ? 'hidden' : 'flex'
-          }`}
-        >
+        <div className="flex flex-1 items-center justify-center gap-x-1.5 py-1.5 sm:py-0">
           <button
             type="button"
             onClick={handleCheckInterpretable}

@@ -1036,11 +1036,9 @@ export default function ExplanationsPane({
               } else {
                 const res = await result.json();
                 const exp = res.explanation as Explanation;
-                // append the explanation to the currentNeuron.explanations
-                if (currentNeuron && currentNeuron.explanations) {
-                  const newCurrentNeuron = { ...currentNeuron };
-                  newCurrentNeuron.explanations = [...currentNeuron.explanations, exp];
-                  setCurrentNeuron(newCurrentNeuron);
+                // append the explanation. A neuron with no database row has no explanations list yet
+                if (currentNeuron) {
+                  setCurrentNeuron({ ...currentNeuron, explanations: [...(currentNeuron.explanations || []), exp] });
                 }
                 setIsAutoInterping(false);
               }

@@ -129,26 +129,23 @@ export const POST = withAuthedUser(async (request: RequestAuthedUser) => {
       );
     }
 
-    // ensure that the scorer model type is supported and user has a key for it
-    // if modelType is unknown (eg llama) we use openrouter
+    // Use OpenRouter when there is a key for it and the model has an OpenRouter id.
+    // Otherwise use the model's own provider key (OpenAI, Anthropic, Google); unknown models use OpenRouter.
     const explainerModelType = getAutoInterpModelTypeFromModelId(explanationModel.name || '');
     let explainerKey: string | null = null;
-    let explainerKeyType: UserSecretType = getKeyTypeForAutoInterpModelType(explainerModelType);
-    let key = await getAutoInterpKeyToUse(explainerKeyType, user);
+    let explainerKeyType: UserSecretType = UserSecretType.OPENROUTER;
+    let key = explanationModelOpenRouterId ? await getAutoInterpKeyToUse(UserSecretType.OPENROUTER, user) : undefined;
+    if (!key) {
+      explainerKeyType = getKeyTypeForAutoInterpModelType(explainerModelType);
+      key = await getAutoInterpKeyToUse(explainerKeyType, user);
+    }
     console.log(`explainerKeyType: ${explainerKeyType}`);
     if (!key) {
-      console.log('no key found, falling back to openrouter');
-      // fall back to look for openrouter key
-      explainerKeyType = UserSecretType.OPENROUTER;
-      key = await getAutoInterpKeyToUse(explainerKeyType, user);
-
-      if (!key) {
-        if (requiresOpenRouterForExplanationType(explanationType.name)) {
-          return NextResponse.json({ message: ERROR_REQUIRES_OPENROUTER }, { status: 400 });
-        }
-        console.log('no openrouter key found either');
-        return NextResponse.json({ message: ERROR_NO_AUTOINTERP_KEY }, { status: 400 });
+      if (requiresOpenRouterForExplanationType(explanationType.name)) {
+        return NextResponse.json({ message: ERROR_REQUIRES_OPENROUTER }, { status: 400 });
       }
+      console.log('no autointerp key found');
+      return NextResponse.json({ message: ERROR_NO_AUTOINTERP_KEY }, { status: 400 });
     }
     explainerKey = key;
 

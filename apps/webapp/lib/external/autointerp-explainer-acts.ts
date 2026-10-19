@@ -2,7 +2,12 @@ import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Activation, ExplanationModelType, Neuron, UserSecretType } from '@prisma/client';
 import OpenAI from 'openai';
-import { AutoInterpModelType, getAnthropicModelId, OPENROUTER_BASE_URL } from '../utils/autointerp';
+import {
+  AutoInterpModelType,
+  getAnthropicModelId,
+  getExplainerReasoningEffort,
+  OPENROUTER_BASE_URL,
+} from '../utils/autointerp';
 import { makeAnthropicMessage, makeGeminiMessage, makeOaiMessage } from './autointerp-shared';
 
 const TOKENS_AROUND_MAX_ACTIVATING_TOKEN = 24;
@@ -262,7 +267,7 @@ Explanation of neuron 5 behavior: `;
         max_completion_tokens: 4096,
         temperature: 1.0,
         top_p: 1.0,
-        reasoning_effort: 'low',
+        reasoning_effort: getExplainerReasoningEffort(explainerModelType),
       });
       // console.log(
       //   `Tokens used - prompt: ${chatCompletion.usage?.prompt_tokens}, completion: ${chatCompletion.usage?.completion_tokens}, total: ${chatCompletion.usage?.total_tokens}`,

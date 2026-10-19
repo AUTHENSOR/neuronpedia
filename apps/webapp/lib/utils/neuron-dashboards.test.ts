@@ -87,6 +87,7 @@ describe('recordToNeuronDashboard', () => {
       expect(a.dataSource).toBe(NEURON_DASHBOARD_BOTTOM_DATA_SOURCE);
       expect(a.binMin).toBe(record.stats.min);
       expect(a.binMax).toBe(lowestEdge);
+      expect(a.binContains).toBeNull();
       expect(a.minValue).toBeLessThanOrEqual(a.maxValue ?? 0);
     });
     dashboard.activations

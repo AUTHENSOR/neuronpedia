@@ -3,7 +3,6 @@
 import ActivationSingleForm from '@/components/activation-single-form';
 import { ACTIVATION_DISPLAY_DEFAULT_CONTEXT_TOKENS } from '@/lib/utils/activations';
 import { CIRCUIT_SPARSITY_MODELS } from '@/lib/utils/circuit-sparsity';
-import { NEURON_DASHBOARD_BOTTOM_DATA_SOURCE } from '@/lib/utils/neuron-dashboards';
 import * as ToggleGroup from '@radix-ui/react-toggle-group';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { HelpCircle } from 'lucide-react';
@@ -19,7 +18,6 @@ export default function ActivationsList({
   defaultRange = 1,
   defaultShowLineBreaks = true,
   showControls = true,
-  showDatasource = true,
   showTopActivationToken = true,
   showTest = false,
   showActivations = true,
@@ -38,7 +36,6 @@ export default function ActivationsList({
   defaultRange?: number;
   defaultShowLineBreaks?: boolean;
   showControls?: boolean;
-  showDatasource?: boolean;
   showTopActivationToken?: boolean;
   showTest?: boolean;
   showActivations?: boolean;
@@ -56,7 +53,10 @@ export default function ActivationsList({
   // used for showing correct snippet
   const [selectedRange, setSelectedRange] = useState(defaultRange);
   const [showLineBreaks, setShowLineBreaks] = useState(defaultShowLineBreaks);
-  const isConnectedNeuronsModel = CIRCUIT_SPARSITY_MODELS.includes(feature?.modelId || '');
+  // Positive and negative columns side by side: circuit-sparsity models, and dashboards read from files.
+  const isTwoColumnLayout =
+    CIRCUIT_SPARSITY_MODELS.includes(feature?.modelId || '') ||
+    Boolean(getSourceSet(feature?.modelId || '', feature?.sourceSetName || '')?.externalDashboardsUrl);
   const [dfaSplit, setDfaSplit] = useState(true);
   // used to determine colors
   const [overallMaxValue, setOverallMaxValue] = useState<number>(-100);
@@ -65,6 +65,25 @@ export default function ActivationsList({
   const [bottomItems, setBottomItems] = useState<ActivationPartialWithRelations[]>([]);
   const [activationTestText, setActivationTestText] = useState('');
   const [showHidden, setShowHidden] = useState(false);
+
+  // A header where a new interval starts in a column. Rows without bins get none.
+  function columnIntervalHeader(list: ActivationPartialWithRelations[], i: number, column: 'top' | 'bottom') {
+    const act = list[i];
+    if (act.binMax === null || act.binMax === undefined) {
+      return null;
+    }
+    const prev = i > 0 ? list[i - 1] : undefined;
+    if (prev && prev.binMin === act.binMin && prev.binMax === act.binMax) {
+      return null;
+    }
+    return (
+      <div className="-mx-3 -mt-1 mb-1 bg-slate-50 px-3 py-1 font-mono text-[8px] font-bold uppercase text-slate-500">
+        {act.binContains === null || act.binContains === undefined
+          ? `${column === 'top' ? 'Top' : 'Bottom'} Activations`
+          : `Interval ${act.binMin?.toFixed(3)} to ${act.binMax.toFixed(3)} (Contains ${(act.binContains * 100).toFixed(3)}%)`}
+      </div>
+    );
+  }
 
   function getMaxValueOfActivations(activationsToCheck: ActivationPartialWithRelations[]) {
     let tempOverallMaxValue = -100;
@@ -82,17 +101,17 @@ export default function ActivationsList({
     if (activations && activations.length > 0) {
       setOverallMaxValue(getMaxValueOfActivations(activations));
       let sortedActs = activations;
-      // For models with connected neurons, always show all activations without filtering
-      const skipFiltering = CIRCUIT_SPARSITY_MODELS.includes(feature?.modelId || '');
+      // The two-column layout shows every activation, without filtering
+      const skipFiltering = isTwoColumnLayout;
 
-      // For connected neurons models, split into top/bottom columns
       if (skipFiltering) {
+        // Each column is grouped by interval (outermost first), then sorted by value within it.
         const topActivations = activations
           .filter((act) => act.dataSource === 'top')
-          .toSorted((a, b) => (b.maxValue || 0) - (a.maxValue || 0)); // highest to lowest
+          .toSorted((a, b) => (b.binMax ?? 0) - (a.binMax ?? 0) || (b.maxValue || 0) - (a.maxValue || 0));
         const bottomActivations = activations
           .filter((act) => act.dataSource === 'bottom')
-          .toSorted((a, b) => (a.maxValue || 0) - (b.maxValue || 0)); // lowest to highest
+          .toSorted((a, b) => (a.binMin ?? 0) - (b.binMin ?? 0) || (a.maxValue || 0) - (b.maxValue || 0));
         setTopItems(topActivations);
         setBottomItems(bottomActivations);
         setItems(activations);
@@ -177,11 +196,7 @@ export default function ActivationsList({
           activations.forEach((act) => {
             if (act.tokens) {
               const key = JSON.stringify(act.tokens.toSorted());
-              // bottom rows peak below zero on purpose
-              const hasActivation =
-                act.maxValue !== undefined &&
-                (act.maxValue > 0 || act.dataSource === NEURON_DASHBOARD_BOTTOM_DATA_SOURCE);
-              if (!uniqueActsMap.has(key) && hasActivation) {
+              if (!uniqueActsMap.has(key) && act.maxValue !== undefined && act.maxValue > 0) {
                 uniqueActsMap.set(key, act);
               }
             }
@@ -231,7 +246,7 @@ export default function ActivationsList({
       }
       setItems(sortedActs);
     }
-  }, [activations, user, showHidden]);
+  }, [activations, user, showHidden, isTwoColumnLayout]);
 
   useEffect(() => {
     setSelectedRange(defaultRange);
@@ -359,8 +374,8 @@ export default function ActivationsList({
           <div className="flex h-48 w-full flex-col items-center justify-center">
             <h1 className="text-lg font-bold text-slate-300">No Known Activations</h1>
           </div>
-        ) : isConnectedNeuronsModel ? (
-          // Two-column layout for connected neurons models
+        ) : isTwoColumnLayout ? (
+          // Two-column layout: negative and positive activations
           <div className="flex flex-col gap-x-0 sm:flex-row">
             {/* Right column: Bottom activations (lowest to highest) */}
             <div className="flex-1">
@@ -379,6 +394,7 @@ export default function ActivationsList({
                       selectedRange > 0 && 'sm:py-2'
                     }`}
                   >
+                    {columnIntervalHeader(bottomItems, activationIndex, 'bottom')}
                     <div className="flex w-full flex-row items-center justify-center">
                       <div className="flex w-full flex-auto flex-col text-left text-sm">
                         {activation.tokens && (
@@ -421,6 +437,7 @@ export default function ActivationsList({
                       selectedRange > 0 && 'sm:py-2'
                     }`}
                   >
+                    {columnIntervalHeader(topItems, activationIndex, 'top')}
                     <div className="flex w-full flex-row items-center justify-center">
                       <div className="flex w-full flex-auto flex-col text-left text-sm">
                         {activation.tokens && (
@@ -557,11 +574,6 @@ export default function ActivationsList({
                           overrideTextSize={overrideTextSize || 'text-[9.5px] sm:text-xs'}
                           className={activationItemClassName}
                         />
-                      )}
-                      {showDatasource && activation.dataSource && (
-                        <div className="flex w-full flex-row items-center justify-end pt-0.5 text-right text-[8px] font-medium leading-none text-slate-400 sm:pt-0">
-                          {activation.dataSource}
-                        </div>
                       )}
                     </div>
                   </div>

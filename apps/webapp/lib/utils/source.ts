@@ -20,6 +20,16 @@ export function isNeuronLayerSource(source: string) {
   return /^-?\d+$/.test(source);
 }
 
+// For the source dropdown, eg "Neurons Layer 6"
+export function getNeuronLayerLabel(layer: string) {
+  return `Neurons Layer ${layer}`;
+}
+
+// For breadcrumbs, eg "MLP Neurons - Layer 6"
+export function getNeuronLayerTitle(layer: string) {
+  return `MLP Neurons - Layer ${layer}`;
+}
+
 export function getLayerNumFromSource(source: string) {
   if (isNeuronLayerSource(source)) {
     return parseInt(source, 10);

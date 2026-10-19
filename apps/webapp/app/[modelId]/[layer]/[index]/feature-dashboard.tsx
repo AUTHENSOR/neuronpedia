@@ -20,7 +20,12 @@ import { CIRCUIT_SPARSITY_MODELS } from '@/lib/utils/circuit-sparsity';
 import { applyNeuronDashboard } from '@/lib/utils/neuron-dashboards';
 import { getFeaturePath } from '@/lib/utils/neuron-identifier';
 import { neuronHasVectorInDatabase, shouldHideBreadcrumbsAndSelectorForNeuronVector } from '@/lib/utils/neuron-vector';
-import { getSourceSetNameFromSource, NEURONS_SOURCESET } from '@/lib/utils/source';
+import {
+  getNeuronLayerTitle,
+  getSourceSetNameFromSource,
+  isNeuronLayerSource,
+  NEURONS_SOURCESET,
+} from '@/lib/utils/source';
 import { Download } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
@@ -61,7 +66,12 @@ export default function FeatureDashboard({
   activationMarkerValue?: number;
 }) {
   const [currentNeuron, setCurrentNeuron] = useState<NeuronWithPartialRelations | undefined>(initialNeuron);
-  const { getReleaseForSourceSet, getSourceSet } = useGlobalContext();
+  const { getReleaseForSourceSet, getSourceSet, globalModels } = useGlobalContext();
+  // A neuron with no database row has no model or sourceSet relation, so fall back to the global lists.
+  const crumbModel = currentNeuron?.model || globalModels[currentNeuron?.modelId || ''];
+  const crumbSourceSet =
+    currentNeuron?.sourceSet || getSourceSet(currentNeuron?.modelId || '', currentNeuron?.sourceSetName || '');
+  const isNeuronLayer = isNeuronLayerSource(currentNeuron?.layer || '');
   const externalDashboard = useNeuronDashboard(
     getSourceSet(currentNeuron?.modelId || '', currentNeuron?.sourceSetName || '')?.externalDashboardsUrl,
     currentNeuron?.modelId,
@@ -164,17 +174,17 @@ export default function FeatureDashboard({
                   : []),
               ],
               <BreadcrumbLink href={`/${currentNeuron?.modelId}`} key={1}>
-                {currentNeuron?.model?.displayName}
+                {crumbModel?.displayName || currentNeuron?.modelId}
               </BreadcrumbLink>,
-              ...(currentNeuron?.sourceSet
+              ...(crumbSourceSet && !isNeuronLayer
                 ? [
-                    <BreadcrumbLink href={`/${currentNeuron?.modelId}/${currentNeuron?.sourceSet?.name}`} key={2.5}>
-                      {currentNeuron?.sourceSet?.type}
+                    <BreadcrumbLink href={`/${currentNeuron?.modelId}/${crumbSourceSet.name}`} key={2.5}>
+                      {crumbSourceSet.type}
                     </BreadcrumbLink>,
                   ]
                 : []),
               <BreadcrumbLink href={`/${currentNeuron?.modelId}/${currentNeuron?.layer}`} key={2}>
-                {currentNeuron?.layer.toUpperCase()}
+                {isNeuronLayer ? getNeuronLayerTitle(currentNeuron?.layer || '') : currentNeuron?.layer.toUpperCase()}
               </BreadcrumbLink>,
               <BreadcrumbPage key={3}>{currentNeuron?.index}</BreadcrumbPage>,
             ]}

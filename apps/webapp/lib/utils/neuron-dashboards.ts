@@ -138,7 +138,8 @@ function exampleToActivation(
 }
 
 // Maps a record to the Neuron fields and Activation rows that FeatureStats and ActivationsList read.
-// Top examples get binMin -1 (the "Top Activations" header). Each band and the bottom list get an interval.
+// dataSource puts a row in the positive or negative column. Bands carry binContains; the top and bottom
+// lists do not, so their headers read "Top" and "Bottom". Top rows keep binMin -1 for the one-column view.
 export function recordToNeuronDashboard(
   record: NeuronDashboardRecord,
   vocab: string[],
@@ -178,7 +179,7 @@ export function recordToNeuronDashboard(
       exampleToActivation(example, vocab, `${prefix}-bottom-${i}`, ids, {
         binMin: record.stats.min,
         binMax: lowestBand ? lowestBand.lo : example.act,
-        binContains: lowestBand ? lowestBand.q_lo : null,
+        binContains: null,
       }),
     );
   });

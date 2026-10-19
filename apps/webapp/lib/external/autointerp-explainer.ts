@@ -291,7 +291,9 @@ Explanation of neuron 4 behavior: the main thing this neuron does is find`;
       system: systemMessage,
       messages,
     });
-    const explanationString = (msg.content[0] as Anthropic.TextBlock).text;
+    // Newer Claude models can put a thinking block before the text
+    const explanationString =
+      msg.content.find((block): block is Anthropic.TextBlock => block.type === 'text')?.text ?? null;
     console.log(explanationString);
     return explanationString;
   }

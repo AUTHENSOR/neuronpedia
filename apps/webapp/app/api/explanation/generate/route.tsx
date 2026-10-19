@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db';
+import { ensureNeuronRowForDashboard, getActivationsForFeature } from '@/lib/db/neuron-dashboard';
 import { getUserByName } from '@/lib/db/user';
 import { getAutoInterpKeyToUse } from '@/lib/db/userSecret';
 import { generateExplanationOaiTokenActivationPair } from '@/lib/external/autointerp-explainer';
@@ -86,6 +87,7 @@ export const POST = withAuthedUser(async (request: RequestAuthedUser) => {
 
   try {
     const body = await explainRequestSchema.validate(bodyJson);
+    const featureIds = { modelId: body.modelId, layer: body.layer, index: body.index.toString() };
 
     // get the explanation type
     const explanationType = await prisma.explanationType.findUnique({
@@ -158,15 +160,8 @@ export const POST = withAuthedUser(async (request: RequestAuthedUser) => {
         return NextResponse.json({ message: ERROR_REQUIRES_OPENROUTER }, { status: 400 });
       }
 
-      let activations = await prisma.activation.findMany({
-        where: {
-          neuron: {
-            modelId: body.modelId,
-            layer: body.layer,
-            index: body.index.toString(),
-          },
-        },
-      });
+      const loaded = await getActivationsForFeature(featureIds);
+      let { activations } = loaded;
 
       // remove duplicates in activations where the tokens.join("") is the same
       activations = [...new Map(activations.map((item) => [item.tokens.join(''), item])).values()];
@@ -185,6 +180,9 @@ export const POST = withAuthedUser(async (request: RequestAuthedUser) => {
 
       if (!explainResult) {
         throw new Error('Error getting result');
+      }
+      if (loaded.dashboard) {
+        await ensureNeuronRowForDashboard(featureIds, loaded.dashboard);
       }
       const exp = await prisma.explanation.create({
         data: {
@@ -210,15 +208,8 @@ export const POST = withAuthedUser(async (request: RequestAuthedUser) => {
     }
 
     if (explanationType.name === 'oai_attention-head') {
-      let activations = await prisma.activation.findMany({
-        where: {
-          neuron: {
-            modelId: body.modelId,
-            layer: body.layer,
-            index: body.index.toString(),
-          },
-        },
-      });
+      const loaded = await getActivationsForFeature(featureIds);
+      let { activations } = loaded;
 
       // remove duplicates in activations where the tokens.join("") is the same
       activations = [...new Map(activations.map((item) => [item.tokens.join(''), item])).values()];
@@ -246,6 +237,9 @@ export const POST = withAuthedUser(async (request: RequestAuthedUser) => {
         throw new Error('Error getting result');
       }
 
+      if (loaded.dashboard) {
+        await ensureNeuronRowForDashboard(featureIds, loaded.dashboard);
+      }
       const exp = await prisma.explanation.create({
         data: {
           modelId: body.modelId,
@@ -270,15 +264,8 @@ export const POST = withAuthedUser(async (request: RequestAuthedUser) => {
     }
 
     if (explanationType.name === 'np_max-act-logits') {
-      let activations = await prisma.activation.findMany({
-        where: {
-          neuron: {
-            modelId: body.modelId,
-            layer: body.layer,
-            index: body.index.toString(),
-          },
-        },
-      });
+      const loaded = await getActivationsForFeature(featureIds);
+      let { activations } = loaded;
 
       // remove duplicates in activations where the tokens.join("") is the same
       activations = [...new Map(activations.map((item) => [item.tokens.join(''), item])).values()];
@@ -292,15 +279,9 @@ export const POST = withAuthedUser(async (request: RequestAuthedUser) => {
         return NextResponse.json({ message: 'No activations found for this neuron' }, { status: 400 });
       }
       // get the feature itself
-      const feature = await prisma.neuron.findUnique({
-        where: {
-          modelId_layer_index: {
-            modelId: body.modelId,
-            layer: body.layer,
-            index: body.index.toString(),
-          },
-        },
-      });
+      const feature = loaded.dashboard
+        ? await ensureNeuronRowForDashboard(featureIds, loaded.dashboard)
+        : await prisma.neuron.findUnique({ where: { modelId_layer_index: featureIds } });
       if (!feature) {
         return NextResponse.json({ message: 'Feature not found' }, { status: 400 });
       }
@@ -315,6 +296,9 @@ export const POST = withAuthedUser(async (request: RequestAuthedUser) => {
       );
       if (!explainResult) {
         throw new Error('Error getting result');
+      }
+      if (loaded.dashboard) {
+        await ensureNeuronRowForDashboard(featureIds, loaded.dashboard);
       }
       const exp = await prisma.explanation.create({
         data: {
@@ -340,15 +324,8 @@ export const POST = withAuthedUser(async (request: RequestAuthedUser) => {
     }
 
     if (explanationType.name === 'np_max-act') {
-      let activations = await prisma.activation.findMany({
-        where: {
-          neuron: {
-            modelId: body.modelId,
-            layer: body.layer,
-            index: body.index.toString(),
-          },
-        },
-      });
+      const loaded = await getActivationsForFeature(featureIds);
+      let { activations } = loaded;
 
       // remove duplicates in activations where the tokens.join("") is the same
       activations = [...new Map(activations.map((item) => [item.tokens.join(''), item])).values()];
@@ -362,15 +339,9 @@ export const POST = withAuthedUser(async (request: RequestAuthedUser) => {
         return NextResponse.json({ message: 'No activations found for this neuron' }, { status: 400 });
       }
       // get the feature itself
-      const feature = await prisma.neuron.findUnique({
-        where: {
-          modelId_layer_index: {
-            modelId: body.modelId,
-            layer: body.layer,
-            index: body.index.toString(),
-          },
-        },
-      });
+      const feature = loaded.dashboard
+        ? await ensureNeuronRowForDashboard(featureIds, loaded.dashboard)
+        : await prisma.neuron.findUnique({ where: { modelId_layer_index: featureIds } });
       if (!feature) {
         return NextResponse.json({ message: 'Feature not found' }, { status: 400 });
       }
@@ -385,6 +356,9 @@ export const POST = withAuthedUser(async (request: RequestAuthedUser) => {
       );
       if (!explainResult) {
         throw new Error('Error getting result');
+      }
+      if (loaded.dashboard) {
+        await ensureNeuronRowForDashboard(featureIds, loaded.dashboard);
       }
       const exp = await prisma.explanation.create({
         data: {
@@ -410,15 +384,8 @@ export const POST = withAuthedUser(async (request: RequestAuthedUser) => {
     }
 
     if (explanationType.name === 'oai_token-act-pair') {
-      let activations = await prisma.activation.findMany({
-        where: {
-          neuron: {
-            modelId: body.modelId,
-            layer: body.layer,
-            index: body.index.toString(),
-          },
-        },
-      });
+      const loaded = await getActivationsForFeature(featureIds);
+      let { activations } = loaded;
 
       // remove duplicates in activations where the tokens.join("") is the same
       activations = [...new Map(activations.map((item) => [item.tokens.join(''), item])).values()];
@@ -445,6 +412,9 @@ export const POST = withAuthedUser(async (request: RequestAuthedUser) => {
         throw new Error('Error getting result');
       }
 
+      if (loaded.dashboard) {
+        await ensureNeuronRowForDashboard(featureIds, loaded.dashboard);
+      }
       const exp = await prisma.explanation.create({
         data: {
           modelId: body.modelId,

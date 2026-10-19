@@ -396,23 +396,23 @@ export default function ActivationsList({
           // Two-column layout: negative and positive activations
           <div className="flex flex-col gap-x-0 sm:flex-row">
             {/* Mobile: one column at a time, picked with tabs */}
-            <div className="flex flex-row gap-x-1 border-b bg-white px-2 py-1.5 sm:hidden">
-              {(['bottom', 'top'] as const).map((column) => (
-                <button
-                  key={column}
-                  type="button"
-                  onClick={() => setMobileColumn(column)}
-                  className={`flex-1 rounded py-1.5 font-mono text-[10px] font-bold uppercase transition-all ${
-                    activeMobileColumn === column
-                      ? `${column === 'bottom' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`
-                      : 'bg-slate-100 text-slate-400'
-                  }`}
-                >
-                  {column === 'bottom'
-                    ? `Negative Activations (${bottomPeak.toFixed(2)})`
-                    : `Positive Activations (${topPeak.toFixed(2)})`}
-                </button>
-              ))}
+            <div className="border-b bg-white px-2 py-1.5 sm:hidden">
+              <div className="flex flex-row overflow-hidden rounded-md border border-sky-600">
+                {(['bottom', 'top'] as const).map((column) => (
+                  <button
+                    key={column}
+                    type="button"
+                    onClick={() => setMobileColumn(column)}
+                    className={`flex-1 py-1.5 font-mono text-[10px] font-bold uppercase transition-all [&:not(:first-child)]:border-l [&:not(:first-child)]:border-sky-600 ${
+                      activeMobileColumn === column ? 'bg-sky-600 text-white' : 'bg-white text-sky-700'
+                    }`}
+                  >
+                    {column === 'bottom'
+                      ? `Negative Activations (${Math.round(bottomPeak)})`
+                      : `Positive Activations (+${Math.round(topPeak)})`}
+                  </button>
+                ))}
+              </div>
             </div>
             {/* Right column: Bottom activations (lowest to highest) */}
             <div className={`flex-1 ${activeMobileColumn === 'bottom' ? '' : 'hidden sm:block'}`}>

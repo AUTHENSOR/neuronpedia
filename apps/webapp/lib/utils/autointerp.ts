@@ -33,14 +33,53 @@ export const EXPLANATIONTYPE_HUMAN = 'human';
 // np_max-act-logits on the neuron with its sign flipped: the most negative examples and the negative logits
 export const EXPLANATIONTYPE_NP_MIN_ACT_LOGITS = 'np_min-act-logits';
 
-// The examples with the most negative values first, negated so that an explainer reads the lowest token as the peak
-export function flipToMostNegative<T extends { values: number[] }>(activations: T[], count: number): T[] {
+type SignedActivation = { values: number[]; maxValue: number; minValue: number };
+
+// One example with the sign of the neuron flipped, so that its lowest token reads as the peak
+export function flipActivationSign<T extends SignedActivation>(activation: T): T {
+  const values = activation.values.map((v) => -v);
+  return {
+    ...activation,
+    values,
+    maxValue: values.length > 0 ? Math.max(...values) : -activation.minValue,
+    minValue: values.length > 0 ? Math.min(...values) : -activation.maxValue,
+  };
+}
+
+// The examples with the most negative values first, with the sign flipped
+export function flipToMostNegative<T extends SignedActivation>(activations: T[], count: number): T[] {
   return activations
     .map((activation) => ({ activation, min: Math.min(...activation.values) }))
     .filter(({ min }) => min < 0)
     .sort((a, b) => a.min - b.min)
     .slice(0, count)
-    .map(({ activation }) => ({ ...activation, values: activation.values.map((v) => -v) }));
+    .map(({ activation }) => flipActivationSign(activation));
+}
+
+const SCORING_ACTIVATIONS_TO_LOAD = 20;
+const SCORING_ZERO_ACTIVATIONS_TO_LOAD_MAX = 5;
+
+// The examples that a scorer reads: the top 20 deduplicated, normalized to a max of 10, and up to
+// 5 all-zero ones. A min explanation describes the flipped neuron, so flip the examples first.
+export function selectScoringActivations<T extends SignedActivation & { tokens: string[] }>(
+  activations: T[],
+  isMin: boolean,
+): { activations: T[]; zeroActivations: T[] } {
+  const flipped = isMin ? activations.map(flipActivationSign) : activations;
+  const deduped = [...new Map(flipped.map((item) => [item.tokens.join(''), item])).values()];
+  deduped.sort((a, b) => b.maxValue - a.maxValue);
+  return {
+    activations: deduped
+      .slice(0, SCORING_ACTIVATIONS_TO_LOAD)
+      .filter((activation) => activation.maxValue > 0)
+      .map((activation) => ({
+        ...activation,
+        values: activation.values.map((value) => (value * 10) / activation.maxValue),
+      })),
+    zeroActivations: deduped
+      .filter((activation) => activation.maxValue === 0)
+      .slice(0, SCORING_ZERO_ACTIVATIONS_TO_LOAD_MAX),
+  };
 }
 
 export enum AutoInterpModelType {

@@ -13,7 +13,9 @@ import { generateScoreRecallAlt } from '@/lib/external/autointerp-scorer-recall-
 import {
   ERROR_RECALL_ALT_FAILED,
   ERROR_REQUIRES_OPENROUTER,
+  EXPLANATIONTYPE_NP_MIN_ACT_LOGITS,
   requiresOpenRouterForExplanationScoreType,
+  selectScoringActivations,
 } from '@/lib/utils/autointerp';
 import { RequestAuthedUser, withAuthedUser } from '@/lib/with-user';
 import { ExplanationScoreModel, UserSecretType } from '@prisma/client';
@@ -103,9 +105,6 @@ const scoreRequestSchema = object({
   scorerModel: string().optional(),
   scorerType: string().required(),
 });
-
-const NUM_ACTIVATIONS_TO_LOAD = 20;
-const NUM_ZERO_ACTIVATIONS_TO_LOAD_MAX = 5;
 
 export const POST = withAuthedUser(async (request: RequestAuthedUser) => {
   const bodyJson = await request.json();
@@ -216,46 +215,31 @@ export const POST = withAuthedUser(async (request: RequestAuthedUser) => {
       layer: explanation.layer,
       index: explanation.index,
     });
-    let activations = loaded.dashboard
-      ? markNearZeroAsNonActivating(loaded.activations, loaded.dashboard)
-      : loaded.activations;
-
-    // remove duplicates in activations where the tokens.join("") is the same
-    activations = [...new Map(activations.map((item) => [item.tokens.join(''), item])).values()];
-
-    // re-sort by maxvalue
-    activations.sort((a, b) => b.maxValue - a.maxValue);
-
-    // get all activations where maxValue is 0
-    const zeroActivations = activations
-      .filter((activation) => activation.maxValue === 0)
-      .slice(0, NUM_ZERO_ACTIVATIONS_TO_LOAD_MAX);
-
-    // take the top 10
-    activations = activations.slice(0, NUM_ACTIVATIONS_TO_LOAD);
-
-    // remove where maxValue is 0 ( in case we had too many duplicates )
-    activations = activations.filter((activation) => activation.maxValue > 0);
-
-    // normalize activation values so that the max value is 10
-    activations = activations.map((activation) => ({
-      ...activation,
-      values: activation.values.map((value) => (value * 10) / activation.maxValue),
-    }));
+    const isMin = explanation.typeName === EXPLANATIONTYPE_NP_MIN_ACT_LOGITS;
+    const { activations, zeroActivations } = selectScoringActivations(
+      loaded.dashboard ? markNearZeroAsNonActivating(loaded.activations, loaded.dashboard) : loaded.activations,
+      isMin,
+    );
+    if (isMin && activations.length === 0) {
+      return NextResponse.json({ message: 'No negative activations found for this neuron' }, { status: 400 });
+    }
 
     if (isJevScoreType(explanationScoreType.name)) {
       const neuron = await prisma.neuron.findUnique({
         where: {
           modelId_layer_index: { modelId: explanation.modelId, layer: explanation.layer, index: explanation.index },
         },
-        select: { pos_str: true },
+        select: { pos_str: true, neg_str: true },
       });
+      const logits = isMin
+        ? loaded.dashboard?.neuron.neg_str || neuron?.neg_str
+        : loaded.dashboard?.neuron.pos_str || neuron?.pos_str;
       const score = await generateScoreJev(
         explanationScoreType.name,
         activations,
         zeroActivations,
         explanation,
-        loaded.dashboard?.neuron.pos_str || neuron?.pos_str || [],
+        logits || [],
         request.user,
       );
       return NextResponse.json({ score });

@@ -4,6 +4,7 @@
 //   corpus/vocab.json         decoded string for each token id
 // The browser reads one neuron with two Range requests. utils/neuron-dashboards-worker serves the files.
 
+import { linearHistogram } from '@/lib/utils/neuron-dashboard-histogram';
 import { ActivationPartialWithRelations, NeuronWithPartialRelations } from '@/prisma/generated/zod';
 
 export const NEURON_DASHBOARD_FORMAT_VERSION = 1;
@@ -70,7 +71,14 @@ export type NeuronDashboard = {
   // Fields of the Neuron row that the dashboard components read.
   neuron: Pick<
     NeuronWithPartialRelations,
-    'maxActApprox' | 'pos_str' | 'pos_values' | 'neg_str' | 'neg_values' | 'frac_nonzero'
+    | 'maxActApprox'
+    | 'pos_str'
+    | 'pos_values'
+    | 'neg_str'
+    | 'neg_values'
+    | 'frac_nonzero'
+    | 'freq_hist_data_bar_values'
+    | 'freq_hist_data_bar_heights'
   >;
   activations: ActivationPartialWithRelations[];
   // The full record, for panels the Neuron row has no fields for (gate and up, echoes, histogram).
@@ -187,6 +195,7 @@ export function recordToNeuronDashboard(
   const { hist } = record;
   const total = record.stats.n_hist_tokens;
   const positive = [...hist.open_pos, ...hist.closed_pos].reduce((sum, count) => sum + count, 0);
+  const linear = linearHistogram(record);
 
   return {
     neuron: {
@@ -197,6 +206,9 @@ export function recordToNeuronDashboard(
       neg_values: record.logits.neg.map(([, , value]) => value),
       // FeatureStats labels this as the share of tokens with activation > 0.
       frac_nonzero: total > 0 ? positive / total : 0,
+      // approximate; FeatureStats can also draw the exact counts with signedLogHistogram
+      freq_hist_data_bar_values: linear.values,
+      freq_hist_data_bar_heights: linear.heights,
     },
     activations,
     record,

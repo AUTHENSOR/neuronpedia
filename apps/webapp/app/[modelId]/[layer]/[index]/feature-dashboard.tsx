@@ -17,6 +17,7 @@ import { BreadcrumbLink, BreadcrumbPage } from '@/components/shadcn/breadcrumbs'
 import VectorItem from '@/components/vector-item';
 import useNeuronDashboard from '@/lib/hooks/use-neuron-dashboard';
 import { CIRCUIT_SPARSITY_MODELS } from '@/lib/utils/circuit-sparsity';
+import { signedLogHistogram } from '@/lib/utils/neuron-dashboard-histogram';
 import { applyNeuronDashboard } from '@/lib/utils/neuron-dashboards';
 import { getFeaturePath } from '@/lib/utils/neuron-identifier';
 import { neuronHasVectorInDatabase, shouldHideBreadcrumbsAndSelectorForNeuronVector } from '@/lib/utils/neuron-vector';
@@ -85,6 +86,10 @@ export default function FeatureDashboard({
         ? applyNeuronDashboard(currentNeuron, externalDashboard.dashboard)
         : currentNeuron,
     [currentNeuron, externalDashboard],
+  );
+  const logHistogram = useMemo(
+    () => (externalDashboard.status === 'ready' ? signedLogHistogram(externalDashboard.dashboard.record) : undefined),
+    [externalDashboard],
   );
   const [hideDeadWarning, setHideDeadWarning] = useState(false);
   const [testTextResult, setTestTextResult] = useState<Activation | undefined>();
@@ -368,6 +373,7 @@ export default function FeatureDashboard({
                     embedPlots={embedPlots}
                     activationMarkerValue={activationMarkerValue}
                     forceMiniStats={forceMiniStats}
+                    signedLogHistogram={logHistogram}
                   />
                 </div>
               )}

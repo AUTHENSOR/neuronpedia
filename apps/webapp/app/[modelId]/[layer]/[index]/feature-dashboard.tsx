@@ -5,12 +5,10 @@ import BreadcrumbsComponent from '@/components/breadcrumbs-component';
 import ExplanationScoreDetailDialog from '@/components/explanation-score-detail-dialog';
 import FeatureSelector from '@/components/feature-selector/feature-selector';
 import FeatureStats from '@/components/feature-stats';
-import CommentsPane from '@/components/panes/comments-pane';
 import ConnectedNeuronsPane from '@/components/panes/connected-neurons-pane';
 import CosSimPane from '@/components/panes/cossim-pane';
 import EmbedsPane from '@/components/panes/embeds-pane';
 import ExplanationsPane from '@/components/panes/explanations-pane';
-import ListsPane from '@/components/panes/lists-pane';
 import SaeLensConfigPane from '@/components/panes/saelens-config-pane';
 import { useGlobalContext } from '@/components/provider/global-provider';
 import { BreadcrumbLink, BreadcrumbPage } from '@/components/shadcn/breadcrumbs';
@@ -31,12 +29,7 @@ import {
 import { Download } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import {
-  Activation,
-  CommentWithPartialRelations,
-  NeuronWithPartialRelations,
-  SourceWithPartialRelations,
-} from 'prisma/generated/zod';
+import { Activation, NeuronWithPartialRelations, SourceWithPartialRelations } from 'prisma/generated/zod';
 import { useEffect, useMemo, useState } from 'react';
 import BookmarkButton from './bookmark-button';
 
@@ -318,18 +311,6 @@ export default function FeatureDashboard({
 
           {/* === EMBEDS */}
           <EmbedsPane currentNeuron={currentNeuron} testTextResult={testTextResult} />
-
-          {/* === LISTS */}
-          {/* TODO: fix this */}
-          <ListsPane currentNeuron={currentNeuron} reloadNeuron={reloadNeuron} />
-
-          {/* === COMMENTS */}
-          <div className="relative mb-0 mt-2 hidden flex-col overflow-hidden rounded-lg border bg-white text-xs shadow-md transition-all sm:mt-4 sm:flex">
-            <CommentsPane
-              initialComments={(currentNeuron?.comments as CommentWithPartialRelations[]) || []}
-              neuron={currentNeuron}
-            />
-          </div>
         </div>
 
         {/* === RIGHT PANE */}

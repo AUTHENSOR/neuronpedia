@@ -10,7 +10,7 @@ import {
 } from '@/lib/utils/activations';
 import { cn } from '@/lib/utils/ui';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { Copy } from 'lucide-react';
+import { Copy, Play } from 'lucide-react';
 import { ActivationPartialWithRelations } from 'prisma/generated/zod';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ActivationItemTokenTooltip from './activation-item-token-tooltip';
@@ -233,6 +233,37 @@ export default function ActivationItem({
       });
     }
   }, [isFullContextOpen, docContext]);
+
+  async function copyToTestField() {
+    if (!setActivationTestText) {
+      return;
+    }
+    if (dashboardDoc) {
+      // The whole document, so a test sees the same context as the dashboard run.
+      setIsCopying(true);
+      try {
+        setActivationTestText(await dashboardDoc.loadText());
+        window.scrollTo(0, 0);
+        return;
+      } catch (error) {
+        console.error('error loading document text, copying the window instead:', error);
+      } finally {
+        setIsCopying(false);
+      }
+    }
+    const wholeString = activation.tokens?.join('') || '';
+    // truncate to the tokens around the max activation
+    if (activation.values && activation.tokens && activation.values.length > ACTIVATION_MAX_COPY_TOKENS) {
+      const maxIndex = activation.values?.indexOf(Math.max(...activation.values!));
+      const startIndex = Math.max(0, maxIndex - ACTIVATION_MAX_COPY_TOKENS / 2);
+      const endIndex = Math.min(activation.tokens?.length, maxIndex + ACTIVATION_MAX_COPY_TOKENS / 2);
+      const truncatedString = activation.tokens?.slice(startIndex, endIndex);
+      setActivationTestText(truncatedString.join(''));
+    } else {
+      setActivationTestText(wholeString);
+    }
+    window.scrollTo(0, 0);
+  }
 
   return (
     <div
@@ -504,33 +535,7 @@ export default function ActivationItem({
             className="flex cursor-pointer flex-row rounded bg-slate-100 p-1.5 text-[10px] font-medium text-slate-400 hover:bg-slate-200"
             title="Copy/Remix"
             disabled={isCopying}
-            onClick={async () => {
-              if (dashboardDoc) {
-                // The whole document, so a test sees the same context as the dashboard run.
-                setIsCopying(true);
-                try {
-                  setActivationTestText(await dashboardDoc.loadText());
-                  window.scrollTo(0, 0);
-                  return;
-                } catch (error) {
-                  console.error('error loading document text, copying the window instead:', error);
-                } finally {
-                  setIsCopying(false);
-                }
-              }
-              const wholeString = activation.tokens?.join('') || '';
-              // truncate to the tokens around the max activation
-              if (activation.values && activation.tokens && activation.values.length > ACTIVATION_MAX_COPY_TOKENS) {
-                const maxIndex = activation.values?.indexOf(Math.max(...activation.values!));
-                const startIndex = Math.max(0, maxIndex - ACTIVATION_MAX_COPY_TOKENS / 2);
-                const endIndex = Math.min(activation.tokens?.length, maxIndex + ACTIVATION_MAX_COPY_TOKENS / 2);
-                const truncatedString = activation.tokens?.slice(startIndex, endIndex);
-                setActivationTestText(truncatedString.join(''));
-              } else {
-                setActivationTestText(wholeString);
-              }
-              window.scrollTo(0, 0);
-            }}
+            onClick={copyToTestField}
           >
             <Copy className="h-3 w-3" />
           </button>
@@ -539,10 +544,23 @@ export default function ActivationItem({
       {dashboardDoc && !fullContext && (
         <Dialog open={isFullContextOpen} onOpenChange={setIsFullContextOpen}>
           <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col gap-3 bg-white" aria-describedby={undefined}>
-            <DialogHeader>
-              <DialogTitle className="text-center font-mono text-xs font-semibold uppercase text-slate-500">
+            <DialogHeader className="flex flex-row items-center justify-between gap-x-3 space-y-0 pr-8">
+              <DialogTitle className="text-left font-mono text-xs font-semibold uppercase text-slate-500">
                 {activation.modelId} · Layer {activation.layer} · Neuron {activation.index}
               </DialogTitle>
+              {setActivationTestText && (
+                <button
+                  type="button"
+                  className="flex shrink-0 flex-row items-center gap-x-1 rounded bg-sky-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-sky-700 disabled:opacity-50"
+                  disabled={isCopying}
+                  onClick={async () => {
+                    setIsFullContextOpen(false);
+                    await copyToTestField();
+                  }}
+                >
+                  <Play className="h-3 w-3" /> Test Prompt
+                </button>
+              )}
             </DialogHeader>
             <div ref={fullContextRef} className="min-h-0 overflow-y-auto pr-2">
               {typeof docContext === 'object' && docContext !== null ? (

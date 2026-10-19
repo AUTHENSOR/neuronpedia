@@ -261,10 +261,10 @@ export default function ActivationSingleForm({
                 />
               </div>
               {!embed && (
-                <div className="mt-0 flex flex-row items-center justify-start">
+                <div className="ml-3 mt-0 flex shrink-0 flex-col items-center justify-start gap-y-1.5 py-1">
                   <button
                     type="button"
-                    className="my-1 ml-3 flex w-[62px] cursor-pointer flex-row items-center justify-center gap-x-0.5 whitespace-pre rounded bg-slate-200 px-1.5 py-1.5 text-[9px] font-medium text-slate-600 hover:bg-slate-300 sm:px-2 sm:py-1.5 sm:text-[10.5px]"
+                    className="flex w-[62px] cursor-pointer flex-row items-center justify-center gap-x-0.5 whitespace-pre rounded bg-slate-200 px-1.5 py-1.5 text-[9px] font-medium text-slate-600 hover:bg-slate-300 sm:px-2 sm:py-1.5 sm:text-[10.5px]"
                     title="Clear Result"
                     onClick={() => {
                       setActivationResult(undefined);
@@ -279,7 +279,7 @@ export default function ActivationSingleForm({
                   {!isNeuronLayerSource(neuron.layer) && (
                     <button
                       type="button"
-                      className="my-1 ml-1.5 flex w-[62px] cursor-pointer flex-row items-center justify-center gap-x-0.5 whitespace-pre rounded bg-slate-200 px-1.5 py-1.5 text-[9px] font-medium text-slate-600 hover:bg-slate-300 sm:px-2 sm:py-1.5 sm:text-[10.5px]"
+                      className="flex w-[62px] cursor-pointer flex-row items-center justify-center gap-x-0.5 whitespace-pre rounded bg-slate-200 px-1.5 py-1.5 text-[9px] font-medium text-slate-600 hover:bg-slate-300 sm:px-2 sm:py-1.5 sm:text-[10.5px]"
                       title="TopK Search"
                       onClick={() => {
                         const textToUse = activationResult.tokens.join('');
@@ -294,7 +294,7 @@ export default function ActivationSingleForm({
                   )}
                   <button
                     type="button"
-                    className="my-1 ml-1.5 flex w-[62px] cursor-pointer flex-row items-center justify-center gap-x-0.5 whitespace-pre rounded bg-slate-200 px-1.5 py-1.5 text-[9px] font-medium text-slate-600 hover:bg-slate-300 sm:px-2 sm:py-1.5 sm:text-[10.5px]"
+                    className="flex w-[62px] cursor-pointer flex-row items-center justify-center gap-x-0.5 whitespace-pre rounded bg-slate-200 px-1.5 py-1.5 text-[9px] font-medium text-slate-600 hover:bg-slate-300 sm:px-2 sm:py-1.5 sm:text-[10.5px]"
                     title="Share Custom Activation Test Result"
                     onClick={() => {
                       const url = `${window.location.origin}/${neuron.modelId}/${neuron.layer}/${

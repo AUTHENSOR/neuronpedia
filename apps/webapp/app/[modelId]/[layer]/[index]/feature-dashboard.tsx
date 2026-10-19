@@ -16,6 +16,7 @@ import { useGlobalContext } from '@/components/provider/global-provider';
 import { BreadcrumbLink, BreadcrumbPage } from '@/components/shadcn/breadcrumbs';
 import VectorItem from '@/components/vector-item';
 import useNeuronDashboard from '@/lib/hooks/use-neuron-dashboard';
+import { NeuronDashboardDocs, NeuronDashboardDocsContext } from '@/lib/hooks/use-neuron-dashboard-doc';
 import { CIRCUIT_SPARSITY_MODELS } from '@/lib/utils/circuit-sparsity';
 import { signedLogHistogram } from '@/lib/utils/neuron-dashboard-histogram';
 import { applyNeuronDashboard } from '@/lib/utils/neuron-dashboards';
@@ -73,11 +74,22 @@ export default function FeatureDashboard({
   const crumbSourceSet =
     currentNeuron?.sourceSet || getSourceSet(currentNeuron?.modelId || '', currentNeuron?.sourceSetName || '');
   const isNeuronLayer = isNeuronLayerSource(currentNeuron?.layer || '');
+  const externalDashboardsUrl = getSourceSet(
+    currentNeuron?.modelId || '',
+    currentNeuron?.sourceSetName || '',
+  )?.externalDashboardsUrl;
   const externalDashboard = useNeuronDashboard(
-    getSourceSet(currentNeuron?.modelId || '', currentNeuron?.sourceSetName || '')?.externalDashboardsUrl,
+    externalDashboardsUrl,
     currentNeuron?.modelId,
     currentNeuron?.layer,
     currentNeuron?.index,
+  );
+  const dashboardDocs = useMemo<NeuronDashboardDocs | null>(
+    () =>
+      externalDashboardsUrl && externalDashboard.status === 'ready'
+        ? { baseUrl: externalDashboardsUrl, docRefs: externalDashboard.dashboard.docRefs }
+        : null,
+    [externalDashboardsUrl, externalDashboard],
   );
   // Database fields, with activations and stats from the external dashboard when the source set has one.
   const shownNeuron = useMemo(
@@ -388,27 +400,31 @@ export default function FeatureDashboard({
                   Loading dashboard...
                 </div>
               ) : (
-                <ActivationsList
-                  feature={shownNeuron}
-                  defaultRange={forceMiniStats ? 1 : currentNeuron?.sourceSet?.defaultRange}
-                  defaultShowLineBreaks={forceMiniStats ? false : currentNeuron?.sourceSet?.defaultShowBreaks}
-                  showCopy={allowTest()}
-                  showTest={allowTest()}
-                  defaultActivationTestText={defaultTestText}
-                  showControls={!embed}
-                  overrideLeading={forceMiniStats ? 'leading-none sm:leading-none' : 'leading-tight sm:leading-tight'}
-                  overrideTextSize={embed ? (forceMiniStats ? 'text-[10px]' : 'text-[10px] sm:text-[12px]') : undefined}
-                  embed={embed}
-                  activations={shownNeuron?.activations}
-                  activationTestTextCallback={(activation) => {
-                    setTestTextResult(activation);
-                  }}
-                  // if false, only show the activation test
-                  showActivations={embedActivations}
-                  // inference has no steering for MLP neurons
-                  showSteerButton={embedSteer && !isNeuronLayer}
-                  showTestField={embedTestField}
-                />
+                <NeuronDashboardDocsContext.Provider value={dashboardDocs}>
+                  <ActivationsList
+                    feature={shownNeuron}
+                    defaultRange={forceMiniStats ? 1 : currentNeuron?.sourceSet?.defaultRange}
+                    defaultShowLineBreaks={forceMiniStats ? false : currentNeuron?.sourceSet?.defaultShowBreaks}
+                    showCopy={allowTest()}
+                    showTest={allowTest()}
+                    defaultActivationTestText={defaultTestText}
+                    showControls={!embed}
+                    overrideLeading={forceMiniStats ? 'leading-none sm:leading-none' : 'leading-tight sm:leading-tight'}
+                    overrideTextSize={
+                      embed ? (forceMiniStats ? 'text-[10px]' : 'text-[10px] sm:text-[12px]') : undefined
+                    }
+                    embed={embed}
+                    activations={shownNeuron?.activations}
+                    activationTestTextCallback={(activation) => {
+                      setTestTextResult(activation);
+                    }}
+                    // if false, only show the activation test
+                    showActivations={embedActivations}
+                    // inference has no steering for MLP neurons
+                    showSteerButton={embedSteer && !isNeuronLayer}
+                    showTestField={embedTestField}
+                  />
+                </NeuronDashboardDocsContext.Provider>
               )}
             </div>
           </div>

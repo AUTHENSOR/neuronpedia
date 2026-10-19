@@ -2,7 +2,10 @@
 //   neurons/layer_XX.idx      N + 1 byte offsets, little-endian uint64
 //   neurons/layer_XX.json.gz  one gzip member per neuron, at bytes offsets[n] .. offsets[n+1]-1
 //   corpus/vocab.json         decoded string for each token id
-// The browser reads one neuron with two Range requests. utils/neuron-dashboards-worker serves the files.
+//   corpus/tokens.npy         uint32 tokens of all documents; corpus/offsets.npy gives each document's span
+//   ../corpus/docs.txt        UTF-8 text of all documents, shared by the models; ../corpus/docs_offsets.npy
+// The browser reads one neuron with two Range requests, and one document only when the user asks for it.
+// utils/neuron-dashboards-worker serves the files.
 
 import { linearHistogram } from '@/lib/utils/neuron-dashboard-histogram';
 import { ActivationPartialWithRelations, NeuronWithPartialRelations } from '@/prisma/generated/zod';
@@ -83,7 +86,12 @@ export type NeuronDashboard = {
   activations: ActivationPartialWithRelations[];
   // The full record, for panels the Neuron row has no fields for (gate and up, echoes, histogram).
   record: NeuronDashboardRecord;
+  // The source document of each activation row, by activation id, to load the full text on request.
+  docRefs: Record<string, NeuronDashboardDocRef>;
 };
+
+// Window tokens are document tokens start .. start + length - 1.
+export type NeuronDashboardDocRef = { doc: number; start: number; length: number };
 
 export class NeuronDashboardError extends Error {}
 
@@ -158,24 +166,25 @@ export function recordToNeuronDashboard(
   }
   const prefix = `${ids.modelId}-${ids.layer}-${ids.index}`;
   const activations: ActivationPartialWithRelations[] = [];
+  const docRefs: Record<string, NeuronDashboardDocRef> = {};
+  const add = (
+    example: NeuronDashboardExample,
+    id: string,
+    bin: { binMin: number; binMax: number; binContains: number | null },
+  ) => {
+    activations.push(exampleToActivation(example, vocab, id, ids, bin));
+    docRefs[id] = { doc: example.doc, start: example.start, length: example.tokens.length };
+  };
   record.top.forEach((example, i) => {
-    activations.push(
-      exampleToActivation(example, vocab, `${prefix}-top-${i}`, ids, {
-        binMin: -1,
-        binMax: record.stats.max,
-        binContains: null,
-      }),
-    );
+    add(example, `${prefix}-top-${i}`, { binMin: -1, binMax: record.stats.max, binContains: null });
   });
   record.bands.forEach((band, b) => {
     band.examples.forEach((example, i) => {
-      activations.push(
-        exampleToActivation(example, vocab, `${prefix}-band${b}-${i}`, ids, {
-          binMin: band.lo,
-          binMax: band.hi,
-          binContains: band.q_hi - band.q_lo,
-        }),
-      );
+      add(example, `${prefix}-band${b}-${i}`, {
+        binMin: band.lo,
+        binMax: band.hi,
+        binContains: band.q_hi - band.q_lo,
+      });
     });
   });
   const lowestBand = record.bands.reduce<NeuronDashboardBand | undefined>(
@@ -183,13 +192,11 @@ export function recordToNeuronDashboard(
     undefined,
   );
   record.bottom.forEach((example, i) => {
-    activations.push(
-      exampleToActivation(example, vocab, `${prefix}-bottom-${i}`, ids, {
-        binMin: record.stats.min,
-        binMax: lowestBand ? lowestBand.lo : example.act,
-        binContains: null,
-      }),
-    );
+    add(example, `${prefix}-bottom-${i}`, {
+      binMin: record.stats.min,
+      binMax: lowestBand ? lowestBand.lo : example.act,
+      binContains: null,
+    });
   });
 
   const { hist } = record;
@@ -212,6 +219,7 @@ export function recordToNeuronDashboard(
     },
     activations,
     record,
+    docRefs,
   };
 }
 
@@ -292,4 +300,62 @@ export async function fetchNeuronDashboard(
     fetchNeuronDashboardVocab(baseUrl),
   ]);
   return recordToNeuronDashboard(record, vocab, ids);
+}
+
+// Returns the byte offset of the data in a .npy file, from the magic string and header length.
+export function npyDataOffset(head: ArrayBuffer): number {
+  const bytes = new Uint8Array(head);
+  const magic = [0x93, 0x4e, 0x55, 0x4d, 0x50, 0x59];
+  if (bytes.length < 12 || magic.some((b, i) => bytes[i] !== b)) {
+    throw new NeuronDashboardError('not a .npy file');
+  }
+  const view = new DataView(head);
+  return bytes[6] === 1 ? 10 + view.getUint16(8, true) : 12 + view.getUint32(8, true);
+}
+
+const npyOffsetCache = new Map<string, Promise<number>>();
+
+function fetchNpyDataOffset(url: string): Promise<number> {
+  let offset = npyOffsetCache.get(url);
+  if (!offset) {
+    offset = fetchRange(url, 0, 12).then(npyDataOffset);
+    offset.catch(() => npyOffsetCache.delete(url));
+    npyOffsetCache.set(url, offset);
+  }
+  return offset;
+}
+
+// Reads items from .. to - 1 of a 1-D .npy array with itemBytes bytes per item.
+async function fetchNpyItems(url: string, itemBytes: number, from: number, to: number): Promise<ArrayBuffer> {
+  if (to <= from) {
+    return new ArrayBuffer(0);
+  }
+  const offset = await fetchNpyDataOffset(url);
+  return fetchRange(url, offset + from * itemBytes, offset + to * itemBytes);
+}
+
+// Returns [start, end) of document doc from an int64 offsets file.
+async function fetchDocSpan(offsetsUrl: string, doc: number): Promise<[number, number]> {
+  if (!Number.isInteger(doc) || doc < 0) {
+    throw new NeuronDashboardError(`bad document ${doc}`);
+  }
+  const view = new DataView(await fetchNpyItems(offsetsUrl, 8, doc, doc + 2));
+  return [Number(view.getBigInt64(0, true)), Number(view.getBigInt64(8, true))];
+}
+
+// All token ids of one document, in this model's tokenizer.
+export async function fetchNeuronDashboardDocTokens(baseUrl: string, doc: number): Promise<number[]> {
+  const base = trimSlash(baseUrl);
+  const [start, end] = await fetchDocSpan(`${base}/corpus/offsets.npy`, doc);
+  return Array.from(new Uint32Array(await fetchNpyItems(`${base}/corpus/tokens.npy`, 4, start, end)));
+}
+
+// The exact text of one document, without the BOS token. The text file is shared by all models.
+export async function fetchNeuronDashboardDocText(baseUrl: string, doc: number): Promise<string> {
+  const corpus = trimSlash(baseUrl).replace(/\/[^/]+$/, '/corpus');
+  const [start, end] = await fetchDocSpan(`${corpus}/docs_offsets.npy`, doc);
+  if (end <= start) {
+    return '';
+  }
+  return new TextDecoder('utf-8').decode(await fetchRange(`${corpus}/docs.txt`, start, end));
 }

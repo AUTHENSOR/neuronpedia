@@ -1,5 +1,6 @@
 'use client';
 
+import useNeuronDashboardDoc, { NeuronDashboardDocContext } from '@/lib/hooks/use-neuron-dashboard-doc';
 import {
   ACTIVATION_DISPLAY_DEFAULT_CONTEXT_TOKENS,
   LINE_BREAK_REPLACEMENT_CHAR,
@@ -20,6 +21,33 @@ const REGULAR_TOKEN_CLASSNAME = 'border-2 border-transparent hover:bg-slate-200'
 export const CENTER_ME_CLASSNAME = 'center-me';
 
 const BOTTOM_ACTIVATION_DATA_SOURCE = 'bottom';
+
+// Document text outside the stored window: it has no activation values, so it is not colored.
+function PlainTokens({
+  tokens,
+  showLineBreaks,
+  className,
+}: {
+  tokens: string[];
+  showLineBreaks: boolean;
+  className: string;
+}) {
+  return (
+    <>
+      {tokens.map((token, i) => {
+        const text = replaceHtmlAnomalies(token);
+        return (
+          <span key={i}>
+            <span className={`inline-block whitespace-pre font-mono text-slate-400 ${className}`}>
+              {text.length > 0 && text.trim() === '' ? text.replace(/\s/g, '\u00A0') : text}
+            </span>
+            {(token.indexOf('\n') !== -1 || text === LINE_BREAK_REPLACEMENT_CHAR) && showLineBreaks && <br />}
+          </span>
+        );
+      })}
+    </>
+  );
+}
 
 export default function ActivationItem({
   activation,
@@ -64,6 +92,9 @@ export default function ActivationItem({
   const [isExpanded, setIsExpanded] = useState(false);
   const [dfaMaxIndex, setDfaMaxIndex] = useState(0);
   const [zHoveredTargetIndex, setZHoveredTargetIndex] = useState<number | null>(null);
+  const dashboardDoc = useNeuronDashboardDoc(activation.id);
+  const [docContext, setDocContext] = useState<NeuronDashboardDocContext | 'loading' | 'error' | null>(null);
+  const [isCopying, setIsCopying] = useState(false);
 
   const maxActivationTokenIndex = activation.maxValueTokenIndex || 0;
   const maxActivationValue = activation.maxValue || 0;
@@ -216,6 +247,13 @@ export default function ActivationItem({
         } ${overrideLeading}`}
         onClick={() => {
           if (enableExpanding) {
+            if (!isExpanded && dashboardDoc && (docContext === null || docContext === 'error')) {
+              setDocContext('loading');
+              dashboardDoc
+                .loadContext()
+                .then(setDocContext)
+                .catch(() => setDocContext('error'));
+            }
             setIsExpanded(!isExpanded);
           }
         }}
@@ -294,6 +332,9 @@ export default function ActivationItem({
           </>
         )}
 
+        {isExpanded && typeof docContext === 'object' && docContext !== null && (
+          <PlainTokens tokens={docContext.before} showLineBreaks={showLineBreaks} className={overrideTextSize} />
+        )}
         {/* in all cases, we should display the activations / max activation (green background) */}
         {activation.tokens &&
           activation.tokens.map((token, tokenIndex) => {
@@ -415,6 +456,14 @@ export default function ActivationItem({
             }
             return '';
           })}
+        {isExpanded && typeof docContext === 'object' && docContext !== null && (
+          <PlainTokens tokens={docContext.after} showLineBreaks={showLineBreaks} className={overrideTextSize} />
+        )}
+        {isExpanded && (docContext === 'loading' || docContext === 'error') && (
+          <span className="ml-2 font-sans text-[10px] text-slate-400">
+            {docContext === 'loading' ? 'Loading full document...' : 'Could not load the full document.'}
+          </span>
+        )}
       </div>
       {showCopy && setActivationTestText && (
         <div className="mt-0 flex flex-row items-center justify-end">
@@ -422,7 +471,21 @@ export default function ActivationItem({
             type="button"
             className="flex cursor-pointer flex-row rounded bg-slate-100 p-1.5 text-[10px] font-medium text-slate-400 hover:bg-slate-200"
             title="Copy/Remix"
-            onClick={() => {
+            disabled={isCopying}
+            onClick={async () => {
+              if (dashboardDoc) {
+                // The whole document, so a test sees the same context as the dashboard run.
+                setIsCopying(true);
+                try {
+                  setActivationTestText(await dashboardDoc.loadText());
+                  window.scrollTo(0, 0);
+                  return;
+                } catch (error) {
+                  console.error('error loading document text, copying the window instead:', error);
+                } finally {
+                  setIsCopying(false);
+                }
+              }
               const wholeString = activation.tokens?.join('') || '';
               // truncate to the tokens around the max activation
               if (activation.values && activation.tokens && activation.values.length > ACTIVATION_MAX_COPY_TOKENS) {

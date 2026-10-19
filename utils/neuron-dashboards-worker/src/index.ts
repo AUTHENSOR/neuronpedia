@@ -1,14 +1,23 @@
 // Serves neuron dashboard files from the R2 bucket to browsers, at
-// https://dashboards.neuronpedia.org/v1/<model>/... (R2 key: neuron-dashboards/v1/<model>/...).
+// https://dashboards.neuronpedia.org/v2/<model>/... (R2 key: neuron-dashboards/v2/<model>/...).
 
 const KEY_PREFIX = 'neuron-dashboards/';
 
-// Only files the webapp reads. raw/, corpus tokens and docs, and percentile tables stay private.
+// Only files the webapp reads. raw/, docs.parquet and percentile tables stay private.
 const PUBLIC_PATH =
-  /^v\d+\/[a-z0-9][a-z0-9.-]*\/(meta\.json|corpus\/vocab\.json|neurons\/layer_\d{2,3}\.(idx|json\.gz))$/;
+  /^v\d+\/(corpus\/(docs\.txt|docs_offsets\.npy)|[a-z0-9][a-z0-9.-]*\/(meta\.json|corpus\/(vocab\.json|tokens\.npy|offsets\.npy)|neurons\/layer_\d{2,3}\.(idx|json\.gz)))$/;
 
-// A shard is about 800 MB and one neuron is about 32 KB, so shards are served only in small ranges.
-const MAX_SHARD_RANGE_BYTES = 4 * 1024 * 1024;
+// Large files are served only in small ranges: a shard (~800 MB) one neuron (~32 KB) at a time, and the
+// corpus files one document (a few KB) at a time.
+const MAX_RANGE_BYTES: [RegExp, number][] = [
+  [/\.json\.gz$/, 4 * 1024 * 1024],
+  [/\/corpus\/(docs\.txt|docs_offsets\.npy|tokens\.npy|offsets\.npy)$/, 64 * 1024],
+];
+
+export function maxRangeBytes(path: string): number | null {
+  const rule = MAX_RANGE_BYTES.find(([pattern]) => pattern.test(path));
+  return rule ? rule[1] : null;
+}
 
 const CACHE_CONTROL = 'public, max-age=86400';
 
@@ -93,16 +102,16 @@ export default {
       return textResponse(404, 'not found');
     }
 
-    const isShard = path.endsWith('.json.gz');
+    const maxRange = maxRangeBytes(path);
     let range = parseRange(request.headers.get('Range'));
     if (range === 'invalid') {
-      if (isShard) {
+      if (maxRange !== null) {
         return textResponse(416, 'use a single "bytes=a-b" range');
       }
       range = null;
     }
-    if (isShard && (range === null || range.end - range.offset + 1 > MAX_SHARD_RANGE_BYTES)) {
-      return textResponse(416, `shards are served only in ranges of at most ${MAX_SHARD_RANGE_BYTES} bytes`);
+    if (maxRange !== null && (range === null || range.end - range.offset + 1 > maxRange)) {
+      return textResponse(416, `this file is served only in ranges of at most ${maxRange} bytes`);
     }
 
     // The Cache API refuses 206 responses, so a range is cached as a 200 under its own key.

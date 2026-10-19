@@ -4,12 +4,15 @@ import fixture from './__fixtures__/neuron-dashboard-qwen3-32b-31-12345.json';
 import {
   applyNeuronDashboard,
   fetchNeuronDashboard,
+  fetchNeuronDashboardDocText,
+  fetchNeuronDashboardDocTokens,
   gunzipJson,
   layerFileStem,
   NEURON_DASHBOARD_BOTTOM_DATA_SOURCE,
   neuronByteRange,
   NeuronDashboardError,
   NeuronDashboardRecord,
+  npyDataOffset,
   recordToNeuronDashboard,
 } from './neuron-dashboards';
 
@@ -100,6 +103,16 @@ describe('recordToNeuronDashboard', () => {
     expect(dashboard.neuron.pos_str).toEqual(record.logits.pos.map((l) => l[1]));
     expect(dashboard.neuron.neg_values).toEqual(record.logits.neg.map((l) => l[2]));
     expect(dashboard.neuron.frac_nonzero).toBeCloseTo(0.4719, 3);
+  });
+
+  it('keeps the source document and window of every row', () => {
+    const example = record.top[0];
+    expect(dashboard.docRefs[dashboard.activations[0].id ?? '']).toEqual({
+      doc: example.doc,
+      start: example.start,
+      length: example.tokens.length,
+    });
+    expect(Object.keys(dashboard.docRefs).length).toBe(dashboard.activations.length);
   });
 
   it('gives every row a unique id', () => {
@@ -203,5 +216,79 @@ describe('gunzipJson', () => {
     expect(await gunzipJson(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length))).toEqual({
       a: [1, 2],
     });
+  });
+});
+
+// A 1-D little-endian .npy file, laid out like numpy writes it (version 1, data aligned to 64 bytes; 128 here, as in the real files).
+function npy(descr: string, data: ArrayBufferView) {
+  let header = `{'descr': '${descr}', 'fortran_order': False, 'shape': (${data.byteLength / (descr === '<u4' ? 4 : 8)},), }`;
+  header += ' '.repeat(64 - ((10 + header.length + 1) % 64)) + '\n';
+  const out = new Uint8Array(10 + header.length + data.byteLength);
+  out.set([0x93, 0x4e, 0x55, 0x4d, 0x50, 0x59, 1, 0], 0);
+  new DataView(out.buffer).setUint16(8, header.length, true);
+  out.set(new TextEncoder().encode(header), 10);
+  out.set(new Uint8Array(data.buffer, data.byteOffset, data.byteLength), 10 + header.length);
+  return out;
+}
+
+describe('npyDataOffset', () => {
+  it('reads the header length', () => {
+    const file = npy('<u4', new Uint32Array([1, 2, 3]));
+    expect(npyDataOffset(file.buffer.slice(0, 12))).toBe(128);
+  });
+
+  it('refuses a file that is not .npy', () => {
+    expect(() => npyDataOffset(new Uint8Array(12).buffer)).toThrow(NeuronDashboardError);
+  });
+});
+
+describe('document loaders', () => {
+  const base = 'https://dashboards.test/v2/qwen3-32b';
+  const texts = ['first doc', '第二个文件 — second', ''];
+  const encoded = texts.map((t) => new TextEncoder().encode(t));
+  const byteOffsets = [0];
+  encoded.forEach((e) => byteOffsets.push(byteOffsets[byteOffsets.length - 1] + e.length));
+  const files: Record<string, Uint8Array> = {
+    [`${base}/corpus/tokens.npy`]: npy('<u4', new Uint32Array([5, 6, 7, 8, 9, 10])),
+    [`${base}/corpus/offsets.npy`]: npy('<i8', new BigInt64Array([0n, 2n, 6n, 6n])),
+    'https://dashboards.test/v2/corpus/docs.txt': Uint8Array.from(encoded.flatMap((e) => Array.from(e))),
+    'https://dashboards.test/v2/corpus/docs_offsets.npy': npy('<i8', new BigInt64Array(byteOffsets.map(BigInt))),
+  };
+  const ranges: string[] = [];
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    ranges.length = 0;
+  });
+
+  function serve() {
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      const file = files[url];
+      if (!file) {
+        return new Response('not found', { status: 404 });
+      }
+      const range = new Headers(init?.headers).get('Range') ?? '';
+      ranges.push(`${url.split('/').pop()} ${range}`);
+      const [, a, b] = /bytes=(\d+)-(\d+)/.exec(range) ?? [];
+      return new Response(Uint8Array.from(file).slice(Number(a), Number(b) + 1), { status: 206 });
+    });
+  }
+
+  it("reads one document's tokens with small Range requests", async () => {
+    serve();
+    expect(await fetchNeuronDashboardDocTokens(base, 1)).toEqual([7, 8, 9, 10]);
+    expect(ranges).toContain(`offsets.npy bytes=${128 + 8}-${128 + 23}`);
+    expect(ranges).toContain(`tokens.npy bytes=${128 + 8}-${128 + 23}`);
+  });
+
+  it('decodes multibyte text exactly and reads it from the shared corpus', async () => {
+    serve();
+    expect(await fetchNeuronDashboardDocText(base, 1)).toBe(texts[1]);
+    expect(await fetchNeuronDashboardDocText(base, 2)).toBe('');
+  });
+
+  it('refuses a bad document id', async () => {
+    serve();
+    await expect(fetchNeuronDashboardDocTokens(base, -1)).rejects.toThrow(NeuronDashboardError);
   });
 });

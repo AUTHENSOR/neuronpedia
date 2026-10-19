@@ -11,6 +11,8 @@ import { getExplanationEmbeddingSql } from '@/lib/external/embedding';
 import {
   ERROR_NO_AUTOINTERP_KEY,
   ERROR_REQUIRES_OPENROUTER,
+  EXPLANATIONTYPE_NP_MIN_ACT_LOGITS,
+  flipToMostNegative,
   getAutoInterpModelTypeFromModelId,
   getKeyTypeForAutoInterpModelType,
   requiresOpenRouterForExplanationType,
@@ -260,18 +262,26 @@ export const POST = withAuthedUser(async (request: RequestAuthedUser) => {
       return NextResponse.json({ explanation: exp });
     }
 
-    if (explanationType.name === 'np_max-act-logits') {
+    if (explanationType.name === 'np_max-act-logits' || explanationType.name === EXPLANATIONTYPE_NP_MIN_ACT_LOGITS) {
+      const isMin = explanationType.name === EXPLANATIONTYPE_NP_MIN_ACT_LOGITS;
       const loaded = await getActivationsForFeature(featureIds);
       let { activations } = loaded;
 
       // remove duplicates in activations where the tokens.join("") is the same
       activations = [...new Map(activations.map((item) => [item.tokens.join(''), item])).values()];
 
-      // re-sort by maxvalue
-      activations.sort((a, b) => b.maxValue - a.maxValue);
+      if (isMin) {
+        activations = flipToMostNegative(activations, ACTIVATIONS_TO_LOAD);
+        if (activations.length === 0) {
+          return NextResponse.json({ message: 'No negative activations found for this neuron' }, { status: 400 });
+        }
+      } else {
+        // re-sort by maxvalue
+        activations.sort((a, b) => b.maxValue - a.maxValue);
 
-      // take the top 10
-      activations = activations.slice(0, ACTIVATIONS_TO_LOAD);
+        // take the top 10
+        activations = activations.slice(0, ACTIVATIONS_TO_LOAD);
+      }
       if (activations.length === 0) {
         return NextResponse.json({ message: 'No activations found for this neuron' }, { status: 400 });
       }
@@ -290,6 +300,7 @@ export const POST = withAuthedUser(async (request: RequestAuthedUser) => {
         explainerModelType,
         explainerKeyType,
         explainerKey,
+        isMin,
       );
       if (!explainResult) {
         throw new Error('Error getting result');

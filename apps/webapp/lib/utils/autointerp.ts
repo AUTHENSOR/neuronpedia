@@ -30,6 +30,18 @@ export async function unwrapAutointerpResponse<T>(result: Promise<AutointerpResu
 }
 
 export const EXPLANATIONTYPE_HUMAN = 'human';
+// np_max-act-logits on the neuron with its sign flipped: the most negative examples and the negative logits
+export const EXPLANATIONTYPE_NP_MIN_ACT_LOGITS = 'np_min-act-logits';
+
+// The examples with the most negative values first, negated so that an explainer reads the lowest token as the peak
+export function flipToMostNegative<T extends { values: number[] }>(activations: T[], count: number): T[] {
+  return activations
+    .map((activation) => ({ activation, min: Math.min(...activation.values) }))
+    .filter(({ min }) => min < 0)
+    .sort((a, b) => a.min - b.min)
+    .slice(0, count)
+    .map(({ activation }) => ({ ...activation, values: activation.values.map((v) => -v) }));
+}
 
 export enum AutoInterpModelType {
   OPENAI = 'openai',

@@ -339,9 +339,13 @@ export const generateExplanationNpMaxActLogits = async (
   explainerModelType: AutoInterpModelType,
   explainerKeyType: UserSecretType,
   explainerKey: string,
+  // For a sign-flipped neuron: the tokens that a negative activation promotes
+  useNegativeLogits = false,
 ) => {
-  // Replace all ▁ characters in feature.pos_str with spaces and clean up newlines
-  const processedTopPositiveLogits = feature.pos_str.map((logit) => logit.replace(/▁/g, ' ').replace(/\n/g, '').trim());
+  // Replace all ▁ characters in the logits with spaces and clean up newlines
+  const processedTopPositiveLogits = (useNegativeLogits ? feature.neg_str : feature.pos_str).map((logit) =>
+    logit.replace(/▁/g, ' ').replace(/\n/g, '').trim(),
+  );
 
   const newMessage = `
 

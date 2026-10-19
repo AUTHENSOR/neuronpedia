@@ -10,6 +10,7 @@ import {
   ERROR_RECALL_ALT_FAILED,
   ERROR_REQUIRES_OPENROUTER,
   EXPLANATIONTYPE_HUMAN,
+  EXPLANATIONTYPE_NP_MIN_ACT_LOGITS,
 } from '@/lib/utils/autointerp';
 import { getNlaSaeFormat } from '@/lib/utils/nla';
 import { SAEFormat } from '@/lib/utils/saelens';
@@ -313,6 +314,14 @@ export default function ExplanationsPane({
                               </div> */}
                   <div className="h-fill flex-1">
                     <div className="flex-inline relative flex items-center">
+                      {explanation.typeName === EXPLANATIONTYPE_NP_MIN_ACT_LOGITS && (
+                        <span
+                          className="mr-1.5 shrink-0 rounded bg-rose-50 px-1 py-px font-sans text-[9px] font-semibold uppercase leading-tight text-rose-600"
+                          title="Explains the most negative activations"
+                        >
+                          Negative
+                        </span>
+                      )}
                       <h1
                         className="cursor-text select-text py-0 text-xs font-medium leading-snug text-slate-700"
                         title={explanation.description}
@@ -1026,6 +1035,8 @@ export default function ExplanationsPane({
                         </Link>
                       </div>,
                     );
+                  } else if (result.status === 400 && res.message) {
+                    showToastMessage(<div>{res.message}</div>);
                   } else {
                     showToastServerError();
                   }

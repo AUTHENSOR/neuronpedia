@@ -403,13 +403,14 @@ export default function ActivationsList({
                     key={column}
                     type="button"
                     onClick={() => setMobileColumn(column)}
-                    className={`flex-1 py-1.5 font-mono text-[10px] font-bold uppercase transition-all [&:not(:first-child)]:border-l [&:not(:first-child)]:border-sky-600 ${
+                    className={`flex flex-1 flex-col items-center justify-center py-1.5 text-center font-mono text-[10px] font-bold uppercase leading-snug transition-all [&:not(:first-child)]:border-l [&:not(:first-child)]:border-sky-600 ${
                       activeMobileColumn === column ? 'bg-sky-600 text-white' : 'bg-white text-sky-700'
                     }`}
                   >
-                    {column === 'bottom'
-                      ? `Negative Activations (${Math.round(bottomPeak)})`
-                      : `Positive Activations (+${Math.round(topPeak)})`}
+                    <div>{column === 'bottom' ? 'Negative Activations' : 'Positive Activations'}</div>
+                    <div className="font-medium normal-case">
+                      {column === 'bottom' ? `Min ${Math.round(bottomPeak)}` : `Max +${Math.round(topPeak)}`}
+                    </div>
                   </button>
                 ))}
               </div>

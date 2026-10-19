@@ -2,6 +2,7 @@
 
 import { DEFAULT_MODELID, DEFAULT_SOURCESET } from '@/lib/env';
 import { getFeaturePath } from '@/lib/utils/neuron-identifier';
+import { isNeuronLayerSource } from '@/lib/utils/source';
 import { useRouter } from '@bprogress/next';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { ChevronDownIcon, ChevronLeft, ChevronRight, Search } from 'lucide-react';
@@ -86,6 +87,34 @@ function HeadIndexDropdown({
   );
 }
 
+// A 12px link under a selector box. A real link, so ctrl-click opens a new tab.
+function StepLink({
+  href,
+  disabled,
+  title,
+  children,
+}: {
+  href: string;
+  disabled: boolean;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      title={title}
+      aria-label={title}
+      aria-disabled={disabled}
+      tabIndex={disabled ? -1 : undefined}
+      className={`flex h-3 max-h-3 min-h-3 flex-1 select-none flex-row items-center justify-center gap-x-0.5 whitespace-pre rounded-sm bg-slate-200 font-mono text-[8px] font-medium uppercase leading-none text-slate-500 hover:bg-sky-700 hover:text-white ${
+        disabled ? 'pointer-events-none opacity-40' : ''
+      }`}
+    >
+      {children}
+    </Link>
+  );
+}
+
 export default function FeatureSelector({
   defaultModelId,
   defaultSourceSet,
@@ -157,6 +186,19 @@ export default function FeatureSelector({
   const router = useRouter();
 
   const indexInputRef = useRef<HTMLInputElement>(null);
+
+  // On a neuron page, step links for layer and index sit under those boxes, for the page's own neuron.
+  const pageModelId = defaultModelId || modelId;
+  const pageModel = globalModels[pageModelId];
+  const pageIndex = parseInt(defaultIndex, 10);
+  const pageLayer =
+    showNextPrev && headLayer === undefined && defaultSource && isNeuronLayerSource(defaultSource) && pageIndex >= 0
+      ? parseInt(defaultSource, 10)
+      : undefined;
+  const isNeuronPage = pageLayer !== undefined;
+  const hasPrevLayer = isNeuronPage && pageLayer > 0;
+  const hasNextLayer = isNeuronPage && (!pageModel?.layers || pageLayer + 1 < pageModel.layers);
+  const hasNextIndex = !pageModel?.neuronsPerLayer || pageIndex + 1 < pageModel.neuronsPerLayer;
 
   useEffect(() => {
     if (globalModels && !defaultSource) {
@@ -230,7 +272,7 @@ export default function FeatureSelector({
         </div>
       )}
       <div className="flex items-start justify-center gap-x-1 sm:gap-x-2">
-        {showNextPrev && (
+        {showNextPrev && !isNeuronPage && (
           <div className="flex flex-row divide-x divide-slate-300 overflow-hidden rounded bg-slate-200">
             <Link
               className={`group hidden h-10 min-h-[40px] select-none flex-col items-center justify-center px-1.5 text-[11px] font-medium uppercase text-slate-500 hover:bg-sky-700 hover:text-white sm:flex ${
@@ -260,21 +302,44 @@ export default function FeatureSelector({
         {showModel && !modelOnSeparateRow && (
           <ModelSelector modelId={modelId} modelIdChangedCallback={modelIdChanged} filterToRelease={filterToRelease} />
         )}
-        <SourceSelector
-          modelId={modelId}
-          defaultSource={source}
-          sourceChangedCallback={layerChanged}
-          defaultSourceSet={defaultSourceSet}
-          filterToRelease={filterToRelease}
-          filterToInferenceEnabled={filterToInferenceEnabled}
-          filterToFeaturedReleases={filterToFeaturedReleases}
-          filterToPublic={filterToPublic}
-          includeHeads={includeHeads}
-          numHeadLayers={numHeadLayers}
-          headLayers={headLayers}
-          selectedHeadLayer={headLayer}
-          headLayerChangedCallback={headLayerChanged}
-        />
+        <div className="flex flex-col">
+          <SourceSelector
+            modelId={modelId}
+            defaultSource={source}
+            sourceChangedCallback={layerChanged}
+            defaultSourceSet={defaultSourceSet}
+            filterToRelease={filterToRelease}
+            filterToInferenceEnabled={filterToInferenceEnabled}
+            filterToFeaturedReleases={filterToFeaturedReleases}
+            filterToPublic={filterToPublic}
+            includeHeads={includeHeads}
+            numHeadLayers={numHeadLayers}
+            headLayers={headLayers}
+            selectedHeadLayer={headLayer}
+            headLayerChangedCallback={headLayerChanged}
+            compact={isNeuronPage}
+          />
+          {isNeuronPage && (
+            <div className="mt-0.5 flex flex-row gap-x-0.5">
+              <StepLink
+                href={getFeaturePath(pageModelId, String(pageLayer - 1), pageIndex)}
+                disabled={!hasPrevLayer}
+                title="Previous layer, same index"
+              >
+                <ChevronLeft className="h-2.5 w-2.5" />
+                {hasPrevLayer && `Layer ${pageLayer - 1}`}
+              </StepLink>
+              <StepLink
+                href={getFeaturePath(pageModelId, String(pageLayer + 1), pageIndex)}
+                disabled={!hasNextLayer}
+                title="Next layer, same index"
+              >
+                {hasNextLayer && `Layer ${pageLayer + 1}`}
+                <ChevronRight className="h-2.5 w-2.5" />
+              </StepLink>
+            </div>
+          )}
+        </div>
 
         {includeHeads && headLayer !== undefined ? (
           <>
@@ -305,7 +370,11 @@ export default function FeatureSelector({
         ) : (
           <>
             <div className="flex flex-col">
-              <div className="flex h-10 max-h-[40px] min-h-[40px] flex-col items-center justify-center rounded border border-slate-300 bg-white px-0.5 py-0 text-center font-mono text-xs font-medium text-sky-700 placeholder-slate-400 focus:border-sky-700 focus:ring-0 sm:w-[60px] sm:px-1">
+              <div
+                className={`flex flex-col items-center justify-center rounded border ${
+                  isNeuronPage ? 'h-[26px] max-h-[26px] min-h-[26px]' : 'h-10 max-h-[40px] min-h-[40px]'
+                } border-slate-300 bg-white px-0.5 py-0 text-center font-mono text-xs font-medium text-sky-700 placeholder-slate-400 focus:border-sky-700 focus:ring-0 sm:w-[60px] sm:px-1`}
+              >
                 <input
                   type="text"
                   ref={indexInputRef}
@@ -331,6 +400,24 @@ export default function FeatureSelector({
                   INDEX
                 </div>
               </div>
+              {isNeuronPage && (
+                <div className="mt-0.5 flex flex-row gap-x-0.5">
+                  <StepLink
+                    href={getFeaturePath(pageModelId, defaultSource, pageIndex - 1)}
+                    disabled={pageIndex <= 0}
+                    title="Previous index"
+                  >
+                    <ChevronLeft className="h-2.5 w-2.5" />
+                  </StepLink>
+                  <StepLink
+                    href={getFeaturePath(pageModelId, defaultSource, pageIndex + 1)}
+                    disabled={!hasNextIndex}
+                    title="Next index"
+                  >
+                    <ChevronRight className="h-2.5 w-2.5" />
+                  </StepLink>
+                </div>
+              )}
             </div>
             <button
               type="button"

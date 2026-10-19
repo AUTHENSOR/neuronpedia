@@ -43,6 +43,7 @@ export default function SourceSelector({
   headLayers = undefined,
   selectedHeadLayer = undefined,
   headLayerChangedCallback,
+  compact = false,
 }: {
   modelId: string;
   defaultSource?: string;
@@ -62,6 +63,8 @@ export default function SourceSelector({
   headLayers?: number[] | undefined;
   selectedHeadLayer?: number | undefined;
   headLayerChangedCallback?: (layer: number) => void;
+  // Shorter trigger, to leave room for a row below it in the same height
+  compact?: boolean;
 }) {
   const isMount = useIsMount();
   const router = useRouter();
@@ -203,7 +206,9 @@ export default function SourceSelector({
                 scrollToModelIdSource(defaultSource || '');
               }, 200);
             }}
-            className="flex h-10 max-h-[40px] min-h-[40px] w-full flex-1 flex-row items-center justify-center gap-x-1 whitespace-pre rounded border border-slate-300 bg-white px-2 text-[10px] font-medium uppercase text-sky-700 hover:bg-slate-50 focus:outline-none sm:pl-5 sm:pr-2 sm:text-xs"
+            className={`flex w-full flex-1 flex-row items-center justify-center gap-x-1 whitespace-pre rounded border border-slate-300 bg-white px-2 text-[10px] font-medium uppercase text-sky-700 hover:bg-slate-50 focus:outline-none sm:pl-5 sm:pr-2 sm:text-xs ${
+              compact ? 'h-[26px] max-h-[26px] min-h-[26px]' : 'h-10 max-h-[40px] min-h-[40px]'
+            }`}
           >
             {includeHeads && selectedHeadLayer !== undefined ? (
               <div className="flex flex-col items-center justify-center gap-y-0.5 leading-none">
@@ -221,7 +226,7 @@ export default function SourceSelector({
                     ? getNeuronLayerLabel(defaultSource)
                     : defaultSource}
                 </div>
-                {release && (
+                {release && !compact && (
                   <div className="mt-0.5 text-center font-mono text-[8px] font-medium leading-none text-slate-400">
                     Source/SAE
                   </div>

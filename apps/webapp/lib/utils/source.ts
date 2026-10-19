@@ -244,3 +244,24 @@ export function getFirstSourceForModel(
       }) || undefined
   );
 }
+
+// The source set a picker starts on: the model's defaultSourceSetName, else its neurons, else the first by name.
+// Neurons ignore publicOnly, like the neurons item in the source dropdown.
+export function getDefaultSourceSetForModel(model: ModelWithPartialRelations | undefined, publicOnly = false) {
+  const sourceSets = (model?.sourceSets || []).filter((ss) => ss.hasDashboards);
+  const listed = sourceSets.filter((ss) => !publicOnly || ss.visibility === Visibility.PUBLIC);
+  return (
+    listed.find((ss) => ss.name === model?.defaultSourceSetName) ||
+    sourceSets.find((ss) => ss.name === NEURONS_SOURCESET) ||
+    listed.toSorted((a, b) => (a.name || '').localeCompare(b.name || ''))[0]
+  );
+}
+
+// The model's defaultSourceId when it is in the default source set, else that set's first source in natural order
+export function getDefaultSourceForModel(model: ModelWithPartialRelations | undefined, publicOnly = false) {
+  const sources = (getDefaultSourceSetForModel(model, publicOnly)?.sources || []).filter((s) => s.hasDashboards);
+  return (
+    sources.find((s) => s.id === model?.defaultSourceId) ||
+    sources.toSorted((a, b) => (a.id || '').localeCompare(b.id || '', undefined, { numeric: true }))[0]
+  );
+}

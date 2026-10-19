@@ -9,7 +9,7 @@ import {
   isNeuronLayerSource,
   NEURONS_SOURCESET,
 } from '@/lib/utils/source';
-import { SourceReleaseWithPartialRelations } from '@/prisma/generated/zod';
+import { SourceReleaseWithPartialRelations, SourceSetWithPartialRelations } from '@/prisma/generated/zod';
 import { useRouter } from '@bprogress/next';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
@@ -71,7 +71,13 @@ export default function SourceSelector({
   // Layers offered in the "Attention At Layer" submenu. Prefer an explicit list
   // (non-contiguous for hybrid models); otherwise fall back to 0..numHeadLayers-1.
   const headLayerList = headLayers ?? Array.from({ length: numHeadLayers }, (_, i) => i);
-  const { getSourceSetsForModelId, releases, getSourceSet, getReleaseForSourceSet } = useGlobalContext();
+  const { getSourceSetsForModelId, releases, getSourceSet, getReleaseForSourceSet, globalModels } = useGlobalContext();
+
+  const modelDefaultSourceSet = globalModels[modelId]?.defaultSourceSetName;
+  // By name, with the model's defaultSourceSetName first
+  const byModelDefaultThenName = (a: SourceSetWithPartialRelations, b: SourceSetWithPartialRelations) =>
+    Number(b.name === modelDefaultSourceSet) - Number(a.name === modelDefaultSourceSet) ||
+    (a.name || '').localeCompare(b.name || '');
 
   function getFirstSourceSetForModelId() {
     let sourceSets = getSourceSetsForModelId(modelId);
@@ -83,12 +89,7 @@ export default function SourceSelector({
         filterToInferenceEnabled ? ss.sources?.some((s) => s.inferenceEnabled) : true,
       )
       .filter((ss) => (filterToOnlyHasDashboards ? ss.hasDashboards : true))
-      .sort((a, b) => {
-        if (a.name && b.name) {
-          return a.name.localeCompare(b.name);
-        }
-        return 0;
-      });
+      .sort(byModelDefaultThenName);
     if (sourceSets.length > 0) {
       return sourceSets[0].name;
     }
@@ -155,12 +156,15 @@ export default function SourceSelector({
         .filter((ss) => (filterToPublic ? ss.visibility === 'PUBLIC' : true))
         .filter((ss) => (filterToInferenceEnabled ? ss.sources?.some((s) => s.inferenceEnabled) : true))
         .filter((ss) => (filterToOnlyHasDashboards ? ss.hasDashboards : true))
-        .sort((a, b) => {
-          if (a.name && b.name) {
-            return a.name.localeCompare(b.name);
-          }
-          return 0;
-        });
+        .sort(byModelDefaultThenName);
+      // Start on neurons when the model has them, unless its default source set is offered
+      if (neuronLayers.length > 0 && !sourceSets.some((ss) => ss.name === modelDefaultSourceSet)) {
+        setRelease(undefined);
+        if (!inHeadMode) {
+          sourceChangedCallback?.(neuronLayers[0]);
+        }
+        return;
+      }
       if (sourceSets.length > 0) {
         const newSourceSet = sourceSets[0].name;
         setSourceSetOpen(newSourceSet);

@@ -2,7 +2,7 @@
 
 import { DEFAULT_MODELID, DEFAULT_SOURCESET } from '@/lib/env';
 import { getFeaturePath } from '@/lib/utils/neuron-identifier';
-import { isNeuronLayerSource } from '@/lib/utils/source';
+import { getDefaultSourceForModel, getDefaultSourceSetForModel, isNeuronLayerSource } from '@/lib/utils/source';
 import { useRouter } from '@bprogress/next';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { ChevronDownIcon, ChevronLeft, ChevronRight, Search } from 'lucide-react';
@@ -176,7 +176,7 @@ export default function FeatureSelector({
   // Notified when the selector leaves attention-head mode (a non-head release/source is picked).
   onExitHeadMode?: () => void;
 }) {
-  const { getSourceSetsForModelId, getFirstSourceForSourceSet, globalModels, getDefaultModel } = useGlobalContext();
+  const { getFirstSourceForSourceSet, globalModels, getDefaultModel } = useGlobalContext();
   const [modelId, setModelId] = useState(defaultModelId || getDefaultModel()?.id || DEFAULT_MODELID);
   const [sourceSet, setSourceSet] = useState(defaultSourceSet || DEFAULT_SOURCESET);
   const [source, setSource] = useState(defaultSource);
@@ -219,9 +219,9 @@ export default function FeatureSelector({
     }
     setHeadLayer(undefined);
     onModelChange?.(newModelId);
-    const newSourceSet = getSourceSetsForModelId(newModelId, filterToPublic)?.[0].name;
+    const newSourceSet = getDefaultSourceSetForModel(globalModels[newModelId], filterToPublic)?.name || '';
     setSourceSet(newSourceSet);
-    setSource(getFirstSourceForSourceSet(newModelId, newSourceSet));
+    setSource(getDefaultSourceForModel(globalModels[newModelId], filterToPublic)?.id);
   };
 
   const layerChanged = (newLayer: string) => {

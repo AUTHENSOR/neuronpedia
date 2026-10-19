@@ -1,5 +1,6 @@
 'use client';
 
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/shadcn/dialog';
 import useNeuronDashboardDoc, { NeuronDashboardDocContext } from '@/lib/hooks/use-neuron-dashboard-doc';
 import {
   ACTIVATION_DISPLAY_DEFAULT_CONTEXT_TOKENS,
@@ -11,7 +12,7 @@ import { cn } from '@/lib/utils/ui';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { Copy } from 'lucide-react';
 import { ActivationPartialWithRelations } from 'prisma/generated/zod';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ActivationItemTokenTooltip from './activation-item-token-tooltip';
 
 const ACTIVATION_MAX_COPY_TOKENS = 512;
@@ -69,6 +70,7 @@ export default function ActivationItem({
   overrideTextColor = 'text-slate-600',
   className,
   overallMinActivationValueInList,
+  fullContext,
 }: {
   activation: ActivationPartialWithRelations;
   overallMaxActivationValueInList?: number;
@@ -87,6 +89,8 @@ export default function ActivationItem({
   className?: string;
   // most negative value in the list, so negative tokens share one red scale; defaults to this row's own minimum
   overallMinActivationValueInList?: number;
+  // document text around the window, shown uncolored before and after it
+  fullContext?: NeuronDashboardDocContext;
 }) {
   const [currentRange, setCurrentRange] = useState(tokensToDisplayAroundMaxActToken);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -95,6 +99,8 @@ export default function ActivationItem({
   const dashboardDoc = useNeuronDashboardDoc(activation.id);
   const [docContext, setDocContext] = useState<NeuronDashboardDocContext | 'loading' | 'error' | null>(null);
   const [isCopying, setIsCopying] = useState(false);
+  const [isFullContextOpen, setIsFullContextOpen] = useState(false);
+  const fullContextRef = useRef<HTMLDivElement>(null);
 
   const maxActivationTokenIndex = activation.maxValueTokenIndex || 0;
   const maxActivationValue = activation.maxValue || 0;
@@ -204,6 +210,30 @@ export default function ActivationItem({
     return toReturn;
   }
 
+  const showFullContextButton =
+    dashboardDoc !== null &&
+    !fullContext &&
+    (isExpanded || tokensToDisplayAroundMaxActToken >= ACTIVATION_DISPLAY_DEFAULT_CONTEXT_TOKENS[2].size);
+
+  function openFullContext() {
+    setIsFullContextOpen(true);
+    if (dashboardDoc && (docContext === null || docContext === 'error')) {
+      setDocContext('loading');
+      dashboardDoc
+        .loadContext()
+        .then(setDocContext)
+        .catch(() => setDocContext('error'));
+    }
+  }
+
+  useEffect(() => {
+    if (isFullContextOpen && typeof docContext === 'object' && docContext !== null) {
+      requestAnimationFrame(() => {
+        fullContextRef.current?.querySelector(`.${CENTER_ME_CLASSNAME}`)?.scrollIntoView({ block: 'center' });
+      });
+    }
+  }, [isFullContextOpen, docContext]);
+
   return (
     <div
       className={cn(
@@ -247,13 +277,6 @@ export default function ActivationItem({
         } ${overrideLeading}`}
         onClick={() => {
           if (enableExpanding) {
-            if (!isExpanded && dashboardDoc && (docContext === null || docContext === 'error')) {
-              setDocContext('loading');
-              dashboardDoc
-                .loadContext()
-                .then(setDocContext)
-                .catch(() => setDocContext('error'));
-            }
             setIsExpanded(!isExpanded);
           }
         }}
@@ -332,8 +355,8 @@ export default function ActivationItem({
           </>
         )}
 
-        {isExpanded && typeof docContext === 'object' && docContext !== null && (
-          <PlainTokens tokens={docContext.before} showLineBreaks={showLineBreaks} className={overrideTextSize} />
+        {fullContext && (
+          <PlainTokens tokens={fullContext.before} showLineBreaks={showLineBreaks} className={overrideTextSize} />
         )}
         {/* in all cases, we should display the activations / max activation (green background) */}
         {activation.tokens &&
@@ -456,13 +479,22 @@ export default function ActivationItem({
             }
             return '';
           })}
-        {isExpanded && typeof docContext === 'object' && docContext !== null && (
-          <PlainTokens tokens={docContext.after} showLineBreaks={showLineBreaks} className={overrideTextSize} />
+        {fullContext && (
+          <PlainTokens tokens={fullContext.after} showLineBreaks={showLineBreaks} className={overrideTextSize} />
         )}
-        {isExpanded && (docContext === 'loading' || docContext === 'error') && (
-          <span className="ml-2 font-sans text-[10px] text-slate-400">
-            {docContext === 'loading' ? 'Loading full document...' : 'Could not load the full document.'}
-          </span>
+        {showFullContextButton && (
+          <div className="flex w-full justify-center pt-1.5">
+            <button
+              type="button"
+              className="rounded bg-slate-100 px-2.5 py-1 font-sans text-[10px] font-medium text-slate-500 hover:bg-sky-100 hover:text-sky-700"
+              onClick={(e) => {
+                e.stopPropagation();
+                openFullContext();
+              }}
+            >
+              Show Full Context
+            </button>
+          </div>
         )}
       </div>
       {showCopy && setActivationTestText && (
@@ -503,6 +535,38 @@ export default function ActivationItem({
             <Copy className="h-3 w-3" />
           </button>
         </div>
+      )}
+      {dashboardDoc && !fullContext && (
+        <Dialog open={isFullContextOpen} onOpenChange={setIsFullContextOpen}>
+          <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col gap-3 bg-white">
+            <DialogHeader>
+              <DialogTitle className="text-base">Full Context</DialogTitle>
+              <DialogDescription className="text-xs">
+                Colored tokens have activation values. Gray text is the rest of the document.
+              </DialogDescription>
+            </DialogHeader>
+            <div ref={fullContextRef} className="min-h-0 overflow-y-auto pr-2">
+              {typeof docContext === 'object' && docContext !== null ? (
+                <ActivationItem
+                  activation={activation}
+                  overallMaxActivationValueInList={overallMaxActivationValueInList}
+                  overallMinActivationValueInList={overallMinActivationValueInList}
+                  showLineBreaks={showLineBreaks}
+                  centerAndBorderOnTokenIndex={anchorTokenIndex}
+                  enableExpanding={false}
+                  showCopy={false}
+                  overrideTextSize={overrideTextSize}
+                  overrideLeading="leading-tight"
+                  fullContext={docContext}
+                />
+              ) : (
+                <div className="py-6 text-center text-xs text-slate-400">
+                  {docContext === 'error' ? 'Could not load the full document.' : 'Loading full document...'}
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

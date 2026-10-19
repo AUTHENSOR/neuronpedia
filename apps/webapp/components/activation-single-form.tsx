@@ -169,6 +169,7 @@ export default function ActivationSingleForm({
                   required
                   value={customText}
                   minRows={1}
+                  maxRows={5}
                   onChange={(e) => {
                     if (enterSubmits && e.target.value.indexOf('\n') !== -1) {
                       testClicked(e.target.value);
